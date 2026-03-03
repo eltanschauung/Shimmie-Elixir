@@ -8,7 +8,7 @@
 
 ```
 
-# Shimmie... re-written in Elixir, with Phoenix!
+# Shimmie re-written in Elixir + Phoenix
 
 Old Shimmie2 links:
 

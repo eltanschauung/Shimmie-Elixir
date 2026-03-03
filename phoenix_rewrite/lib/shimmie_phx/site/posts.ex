@@ -21,7 +21,50 @@ defmodule ShimmiePhoenix.Site.Posts do
 
   def get_post(_), do: nil
 
-  def image_route(post), do: "/image/#{post.id}/#{URI.encode(post.filename)}"
+  def image_route(post), do: "/image/#{post.id}/#{URI.encode(download_filename(post))}"
+
+  def download_filename(post) when is_map(post) do
+    id =
+      case parse_int(Map.get(post, :id)) do
+        n when n > 0 -> Integer.to_string(n)
+        _ -> "post"
+      end
+
+    ext =
+      post
+      |> Map.get(:ext, "")
+      |> to_string()
+      |> String.trim_leading(".")
+      |> String.downcase()
+      |> case do
+        "" -> "bin"
+        value -> value
+      end
+
+    tag_blob =
+      case Map.get(post, :tags, []) do
+        tags when is_list(tags) ->
+          tags
+          |> Enum.map(&sanitize_filename_fragment/1)
+          |> Enum.reject(&(&1 == ""))
+          |> Enum.join(" ")
+          |> String.slice(0, 150)
+          |> String.trim()
+
+        _ ->
+          ""
+      end
+
+    stem =
+      case tag_blob do
+        "" -> id
+        _ -> "#{id} - #{tag_blob}"
+      end
+
+    "#{stem}.#{ext}"
+  end
+
+  def download_filename(_), do: "post.bin"
 
   def thumb_route(%{id: id, hash: hash}) when is_integer(id) and is_binary(hash) do
     if valid_hash?(hash) do
@@ -407,6 +450,14 @@ defmodule ShimmiePhoenix.Site.Posts do
   end
 
   defp valid_hash?(hash), do: String.match?(hash, ~r/\A[0-9a-fA-F]{32}\z/)
+
+  defp sanitize_filename_fragment(value) do
+    value
+    |> to_string()
+    |> String.replace(~r/[^A-Za-z0-9 _.-]+/u, "_")
+    |> String.replace(~r/\s+/u, " ")
+    |> String.trim()
+  end
 
   defp warehouse_path(base, hash) do
     splits = Site.warehouse_splits()

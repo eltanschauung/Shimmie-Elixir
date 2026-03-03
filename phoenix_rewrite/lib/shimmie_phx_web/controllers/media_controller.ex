@@ -14,8 +14,11 @@ defmodule ShimmiePhoenixWeb.MediaController do
          post when not is_nil(post) <- Posts.get_post(id),
          path <- Posts.media_path(post),
          true <- regular_non_symlink_file?(path) do
+      filename = safe_header_filename(Posts.download_filename(post))
+
       conn
       |> put_resp_content_type(Posts.image_mime(post))
+      |> put_resp_header("content-disposition", ~s(inline; filename="#{filename}"))
       |> send_file(200, path)
     else
       _ -> send_resp(conn, 404, "Not Found")
@@ -73,5 +76,11 @@ defmodule ShimmiePhoenixWeb.MediaController do
       {:ok, %File.Stat{type: :regular}} -> true
       _ -> false
     end
+  end
+
+  defp safe_header_filename(value) do
+    value
+    |> to_string()
+    |> String.replace(~r/[\r\n"]/u, "_")
   end
 end

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "6a4b5ad82983526bd0c4be833c3318fc",
+    "content-hash": "2393c136c6dbdd27479e846c72c39b31",
     "packages": [
         {
             "name": "bower-asset/jquery",
@@ -47,21 +47,18 @@
         },
         {
             "name": "bower-asset/js-cookie",
-            "version": "v2.2.1",
+            "version": "v3.0.5",
             "source": {
                 "type": "git",
                 "url": "git@github.com:js-cookie/js-cookie.git",
-                "reference": "54962f884e9ae33f93e13ac903ffaf1d5a523598"
+                "reference": "ab3f67fc4fad88cdf07b258c08e4164e06bf7506"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/js-cookie/js-cookie/zipball/54962f884e9ae33f93e13ac903ffaf1d5a523598",
-                "reference": "54962f884e9ae33f93e13ac903ffaf1d5a523598"
+                "url": "https://api.github.com/repos/js-cookie/js-cookie/zipball/ab3f67fc4fad88cdf07b258c08e4164e06bf7506",
+                "reference": "ab3f67fc4fad88cdf07b258c08e4164e06bf7506"
             },
-            "type": "bower-asset",
-            "license": [
-                "MIT"
-            ]
+            "type": "bower-asset"
         },
         {
             "name": "enshrined/svg-sanitize",
@@ -5795,5 +5792,5 @@
     "platform-overrides": {
         "php": "8.4.0"
     },
-    "plugin-api-version": "2.6.0"
+    "plugin-api-version": "2.9.0"
 }

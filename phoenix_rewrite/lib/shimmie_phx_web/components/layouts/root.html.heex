@@ -5,6 +5,29 @@
     <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script type="text/javascript">
+      (function () {
+        var ua = navigator.userAgent || "";
+        var isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
+        if (!isMobile) return;
+        var meta = document.querySelector('meta[name="viewport"]');
+        if (!meta) return;
+        var target = 1200;
+        var screenWidth = (window.screen && window.screen.width) || window.innerWidth || target;
+        var scale = screenWidth / target;
+        if (!scale || scale <= 0) scale = 0.6;
+        if (scale > 1) scale = 1;
+        var content =
+          "width=" +
+          target +
+          ", initial-scale=" +
+          scale.toFixed(3) +
+          ", minimum-scale=" +
+          scale.toFixed(3) +
+          ", maximum-scale=1";
+        meta.setAttribute("content", content);
+      })();
+    </script>
+    <script type="text/javascript">
       base_href = '';
     </script>
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
@@ -226,15 +249,13 @@
     <%= if @legacy_chrome && @legacy_chrome.show? do %>
       <footer>
         <div>
-          Media &copy; their respective owners,
-          <a href="https://code.shishnet.org/shimmie2/">Shimmie</a>
-          &copy; <a href="https://www.shishnet.org/">Shish</a>
-          &amp; <a href="https://github.com/shish/shimmie2/graphs/contributors">The Team</a>
-          2007-2020
-          | <a href="https://github.com/eltanschauung/shimmie2-elixir">Shimmie2-Elixir</a>
+          Serving <%= @legacy_chrome.post_count || 0 %> posts |
           <%= if @legacy_chrome.contact_href do %>
-            <br /><a href={@legacy_chrome.contact_href}>Contact</a>
+            <a href={@legacy_chrome.contact_href}>Contact</a>
+          <% else %>
+            Contact
           <% end %>
+          | <a href="https://github.com/eltanschauung/shimmie2-elixir">Shimmie2-Elixir</a>
         </div>
       </footer>
     <% end %>

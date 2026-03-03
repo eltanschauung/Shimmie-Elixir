@@ -24,7 +24,8 @@ defmodule ShimmiePhoenixWeb.Plugs.LegacyChrome do
       nav_links: nav_links(category, current_user),
       sub_links: sub_links(category, path, current_user),
       blotter_entries: if(show_chrome, do: Pages.list_blotter(blotter_recent()), else: []),
-      contact_href: Appearance.contact_href()
+      contact_href: Appearance.contact_href(),
+      post_count: Store.count_posts()
     }
 
     conn

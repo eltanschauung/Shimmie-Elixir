@@ -2785,7 +2785,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
          },
          %{
            name: "telegram_alerts_base_url",
-           label: "Public board URL (eg. https://gyate.net): ",
+           label: "Public board URL (eg. https://example.com): ",
            type: "string",
            leading_break?: true
          },

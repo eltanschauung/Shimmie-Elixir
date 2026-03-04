@@ -166,12 +166,67 @@ defmodule ShimmiePhoenix.Site.Upload do
     end
   end
 
+  def create_url_upload(
+        url,
+        actor,
+        remote_ip,
+        common_tags,
+        specific_tags,
+        common_source,
+        row_source
+      ) do
+    max_size =
+      parse_size(
+        Store.get_config("upload_size", Integer.to_string(10 * 1024 * 1024)),
+        10 * 1024 * 1024
+      )
+
+    with :ok <- transload_enabled?(),
+         {:ok, normalized_url} <- normalize_remote_url(url),
+         {:ok, tmp_path, filename, content_type} <- fetch_remote_upload(normalized_url, max_size) do
+      try do
+        upload = %Plug.Upload{
+          path: tmp_path,
+          filename: filename,
+          content_type: content_type
+        }
+
+        create_file_upload(
+          upload,
+          actor,
+          remote_ip,
+          common_tags,
+          specific_tags,
+          common_source,
+          first_non_blank([row_source, normalized_url])
+        )
+      after
+        _ = File.rm(tmp_path)
+      end
+    end
+  end
+
   defp upload_starts_approved?(actor) do
     cond do
       not Approval.approval_supported?() -> true
       Approval.can_approve?(actor) -> true
       true -> false
     end
+  end
+
+  defp transload_enabled? do
+    case transload_engine() do
+      "none" -> {:error, :transload_disabled}
+      "" -> {:error, :transload_disabled}
+      _ -> :ok
+    end
+  end
+
+  defp transload_engine do
+    Store.get_config("transload_engine", "none")
+    |> to_string()
+    |> String.trim()
+    |> String.downcase()
   end
 
   defp anonymous_uploads_enabled? do
@@ -189,6 +244,171 @@ defmodule ShimmiePhoenix.Site.Upload do
   defp anonymous_actor?(_), do: false
 
   defp normalize_class(class), do: class |> to_string() |> String.trim() |> String.downcase()
+
+  defp normalize_remote_url(url) do
+    value = url |> to_string() |> String.trim()
+
+    case URI.parse(value) do
+      %URI{scheme: scheme} = uri when scheme in ["http", "https"] ->
+        {:ok, URI.to_string(uri)}
+
+      _ ->
+        {:error, :invalid_url}
+    end
+  end
+
+  defp fetch_remote_upload(url, max_size) do
+    case transload_engine() do
+      "wget" -> fetch_with_wget(url, max_size)
+      "curl" -> fetch_with_curl(url, max_size)
+      _ -> fetch_with_httpc(url, max_size)
+    end
+  end
+
+  defp fetch_with_wget(url, max_size) do
+    tmp_path = tmp_transload_path()
+
+    case System.cmd("wget", ["-q", "-O", tmp_path, "--", url], stderr_to_stdout: true) do
+      {_out, 0} ->
+        finalize_remote_file(tmp_path, url, max_size, nil)
+
+      _ ->
+        _ = File.rm(tmp_path)
+        {:error, :transload_failed}
+    end
+  end
+
+  defp fetch_with_curl(url, max_size) do
+    tmp_path = tmp_transload_path()
+
+    args = [
+      "-L",
+      "--fail",
+      "--silent",
+      "--show-error",
+      "--max-filesize",
+      Integer.to_string(max_size),
+      "-o",
+      tmp_path,
+      url
+    ]
+
+    case System.cmd("curl", args, stderr_to_stdout: true) do
+      {_out, 0} ->
+        finalize_remote_file(tmp_path, url, max_size, nil)
+
+      _ ->
+        _ = File.rm(tmp_path)
+        {:error, :transload_failed}
+    end
+  end
+
+  defp fetch_with_httpc(url, max_size) do
+    ensure_http_started()
+    request = {String.to_charlist(url), []}
+    options = [timeout: 30_000, connect_timeout: 10_000, autoredirect: true]
+
+    case :httpc.request(:get, request, options, body_format: :binary) do
+      {:ok, {{_version, status, _reason}, headers, body}} when status in 200..299 ->
+        tmp_path = tmp_transload_path()
+
+        case File.write(tmp_path, body, [:binary]) do
+          :ok ->
+            content_type = header_value(headers, "content-type") || "application/octet-stream"
+            finalize_remote_file(tmp_path, url, max_size, {headers, content_type})
+
+          _ ->
+            _ = File.rm(tmp_path)
+            {:error, :invalid_upload}
+        end
+
+      _ ->
+        {:error, :transload_failed}
+    end
+  end
+
+  defp finalize_remote_file(tmp_path, url, max_size, header_meta) do
+    case File.stat(tmp_path) do
+      {:ok, stat} when stat.size > 0 and stat.size <= max_size ->
+        {filename, content_type} =
+          case header_meta do
+            {headers, ctype} -> {suggested_filename(url, headers), ctype}
+            _ -> {suggested_filename(url, []), "application/octet-stream"}
+          end
+
+        {:ok, tmp_path, filename, content_type}
+
+      {:ok, stat} when stat.size > max_size ->
+        _ = File.rm(tmp_path)
+        {:error, :too_large}
+
+      _ ->
+        _ = File.rm(tmp_path)
+        {:error, :invalid_upload}
+    end
+  end
+
+  defp tmp_transload_path do
+    Path.join(System.tmp_dir!(), "shimmie_transload_#{System.unique_integer([:positive])}.bin")
+  end
+
+  defp ensure_http_started do
+    _ = Application.ensure_all_started(:inets)
+    _ = Application.ensure_all_started(:ssl)
+    :ok
+  end
+
+  defp suggested_filename(url, headers) do
+    from_header = content_disposition_filename(headers)
+
+    from_url =
+      case URI.parse(url) do
+        %URI{path: path} when is_binary(path) and path != "" ->
+          path
+          |> Path.basename()
+          |> URI.decode()
+          |> String.trim()
+
+        _ ->
+          ""
+      end
+
+    case first_non_blank([from_header, from_url]) do
+      "" -> "transload.bin"
+      name -> Path.basename(name)
+    end
+  end
+
+  defp content_disposition_filename(headers) do
+    case header_value(headers, "content-disposition") do
+      nil ->
+        nil
+
+      value ->
+        case Regex.run(~r/filename\*?=(?:UTF-8''|\"?)([^\";]+)/i, value) do
+          [_, filename] -> filename |> String.trim() |> URI.decode()
+          _ -> nil
+        end
+    end
+  end
+
+  defp header_value(headers, wanted) when is_list(headers) do
+    wanted_down = String.downcase(wanted)
+
+    Enum.find_value(headers, fn
+      {key, value} ->
+        key_s = key |> to_string() |> String.downcase()
+
+        if key_s == wanted_down do
+          value |> to_string() |> String.trim()
+        else
+          nil
+        end
+
+      _ ->
+        nil
+    end)
+  end
 
   defp actor_id(%{id: id}) when is_integer(id) and id > 0, do: id
   defp actor_id(_), do: parse_int(Store.get_config("anon_id", "1"), 1)

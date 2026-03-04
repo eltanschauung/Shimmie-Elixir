@@ -84,19 +84,37 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
 
       true ->
         {oks, errors} =
-          Enum.reduce(entries, {[], []}, fn %{upload: upload, row: row}, {ok_acc, err_acc} ->
+          Enum.reduce(entries, {[], []}, fn entry, {ok_acc, err_acc} ->
+            row = entry.row
             row_tags = Map.get(params, "tags#{row}")
             row_source = Map.get(params, "url#{row}")
 
-            case Upload.create_file_upload(
-                   upload,
-                   actor,
-                   remote_ip,
-                   common_tags,
-                   row_tags,
-                   common_source,
-                   row_source
-                 ) do
+            result =
+              case entry do
+                %{kind: :file, upload: upload} ->
+                  Upload.create_file_upload(
+                    upload,
+                    actor,
+                    remote_ip,
+                    common_tags,
+                    row_tags,
+                    common_source,
+                    row_source
+                  )
+
+                %{kind: :url, url: url} ->
+                  Upload.create_url_upload(
+                    url,
+                    actor,
+                    remote_ip,
+                    common_tags,
+                    row_tags,
+                    common_source,
+                    row_source
+                  )
+              end
+
+            case result do
               {:ok, image_id} ->
                 post_tags =
                   case Posts.get_post(image_id) do
@@ -108,7 +126,8 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
                 _ = TelegramAlerts.notify_post_uploaded(image_id, actor, post_tags, approved?)
                 {[image_id | ok_acc], err_acc}
 
-              {:error, reason} -> {ok_acc, [reason | err_acc]}
+              {:error, reason} ->
+                {ok_acc, [reason | err_acc]}
             end
           end)
 
@@ -1589,24 +1608,45 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
   end
 
   defp upload_entries(params) do
-    params
-    |> Enum.flat_map(fn
+    file_entries =
+      params
+      |> Enum.flat_map(fn
       {"data" <> row, uploads} when is_list(uploads) ->
         parsed_row = parse_row_number(row)
 
         uploads
         |> Enum.with_index()
         |> Enum.flat_map(fn
-          {%Plug.Upload{} = upload, order} -> [%{row: parsed_row, order: order, upload: upload}]
+          {%Plug.Upload{} = upload, order} ->
+            [%{kind: :file, row: parsed_row, order: order, upload: upload}]
+
           _ -> []
         end)
 
       {"data" <> row, %Plug.Upload{} = upload} ->
-        [%{row: parse_row_number(row), order: 0, upload: upload}]
+        [%{kind: :file, row: parse_row_number(row), order: 0, upload: upload}]
 
       _ ->
         []
     end)
+
+    url_entries =
+      params
+      |> Enum.flat_map(fn
+        {"url" <> row, value} ->
+          url = value |> to_string() |> String.trim()
+
+          if url == "" do
+            []
+          else
+            [%{kind: :url, row: parse_row_number(row), order: 10_000, url: url}]
+          end
+
+        _ ->
+          []
+      end)
+
+    (file_entries ++ url_entries)
     |> Enum.sort_by(fn %{row: row, order: order} -> {row, order} end)
   end
 
@@ -1631,6 +1671,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     do: "One or more files use a blocked or unsupported file type"
 
   defp upload_error_message(:invalid_upload), do: "Invalid upload payload"
+  defp upload_error_message(:invalid_url), do: "One or more URL uploads were invalid"
+  defp upload_error_message(:transload_disabled), do: "URL uploads are disabled in board settings"
+  defp upload_error_message(:transload_failed), do: "One or more URL uploads could not be fetched"
   defp upload_error_message(:db_failed), do: "Database insert failed"
   defp upload_error_message(_), do: "Upload failed"
 

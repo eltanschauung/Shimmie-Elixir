@@ -503,27 +503,43 @@ defmodule ShimmiePhoenix.Site.Pages do
   end
 
   def random_post(search) do
-    {posts, _count} = ShimmiePhoenix.Site.Index.list_posts(search, 1, 200)
+    {_first_page, total_count} = ShimmiePhoenix.Site.Index.list_posts(search, 1, 1)
 
-    case posts do
-      [] -> nil
-      list -> Enum.random(list)
+    case total_count do
+      n when is_integer(n) and n > 0 ->
+        page = :rand.uniform(n)
+
+        case ShimmiePhoenix.Site.Index.list_posts(search, page, 1) do
+          {[post], _} -> post
+          {posts, _} -> List.first(posts)
+          _ -> nil
+        end
+
+      _ ->
+        nil
     end
   end
 
   def random_posts(search, count) when is_integer(count) and count > 0 do
-    sample_pool = max(count * 20, 200)
-    {posts, _count} = ShimmiePhoenix.Site.Index.list_posts(search, 1, sample_pool)
+    {_first_page, total_count} = ShimmiePhoenix.Site.Index.list_posts(search, 1, 1)
 
-    case posts do
-      [] ->
+    case total_count do
+      n when is_integer(n) and n > 0 ->
+        sample_size = min(count, n)
+
+        1..n
+        |> Enum.take_random(sample_size)
+        |> Enum.map(fn page ->
+          case ShimmiePhoenix.Site.Index.list_posts(search, page, 1) do
+            {[post], _} -> post
+            {posts, _} -> List.first(posts)
+            _ -> nil
+          end
+        end)
+        |> Enum.reject(&is_nil/1)
+
+      _ ->
         []
-
-      list when length(list) <= count ->
-        list
-
-      list ->
-        Enum.take_random(list, count)
     end
   end
 

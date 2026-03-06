@@ -4,14 +4,13 @@ defmodule ShimmiePhoenix.Site.Index do
   """
 
   alias ShimmiePhoenix.Site
+  alias ShimmiePhoenix.Site.Permissions
   alias ShimmiePhoenix.Site.Store
   alias ShimmiePhoenix.Site.TagRules
   alias ShimmiePhoenix.Repo
 
   @sqlite_separator <<31>>
   @sqlite_tag_separator <<29>>
-  @approver_classes MapSet.new(["admin", "tag-dono", "tag_dono", "taggers", "moderator"])
-
   def posts_per_page do
     case Store.get_config("index_images", "24") |> to_string() |> Integer.parse() do
       {n, ""} when n > 0 -> n
@@ -482,10 +481,7 @@ defmodule ShimmiePhoenix.Site.Index do
   defp normalize_user_map(_), do: nil
 
   defp can_approve?(%{class: class}) when is_binary(class) do
-    class
-    |> String.trim()
-    |> String.downcase()
-    |> then(&MapSet.member?(@approver_classes, &1))
+    Permissions.allowed?(:approve, class)
   end
 
   defp can_approve?(_), do: false

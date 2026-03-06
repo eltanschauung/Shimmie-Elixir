@@ -1,0 +1,58 @@
+<article class="noleft">
+  <section id="Permissionsmain">
+    <h3 data-toggle-sel="#Permissionsmain" class="">Permissions Editor</h3>
+    <div class="blockbody">
+      <%= if @notice do %>
+        <p class="notice"><%= @notice %></p>
+      <% end %>
+      <%= if @error do %>
+        <p class="error"><%= @error %></p>
+      <% end %>
+
+      <p>
+        Configure which account classes can use each capability.
+        Use comma-separated classes (example: <code>anonymous, user, admin</code>).
+      </p>
+
+      <form action="/permissions/save" method="POST">
+        <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+        <table class="form" style="width: 100%;">
+          <thead>
+            <tr>
+              <th style="width: 220px;">Capability</th>
+              <th>Allowed Classes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <%= for row <- @rows do %>
+              <tr>
+                <th style="text-align: left;"><%= row.label %></th>
+                <td>
+                  <input
+                    type="text"
+                    name={"rules[#{row.id}]"}
+                    value={row.classes_csv}
+                    style="width: 100%;"
+                    autocomplete="off"
+                  />
+                </td>
+              </tr>
+            <% end %>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="2">
+                <input type="submit" value="Save Permissions" style="width: 100%;" />
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </form>
+
+      <p>
+        Known classes:
+        <%= Enum.join(@known_classes, ", ") %>
+      </p>
+    </div>
+  </section>
+</article>

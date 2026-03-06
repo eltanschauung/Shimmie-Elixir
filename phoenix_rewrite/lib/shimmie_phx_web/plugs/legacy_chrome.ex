@@ -51,6 +51,7 @@ defmodule ShimmiePhoenixWeb.Plugs.LegacyChrome do
       String.starts_with?(path, "/ext_manager") -> :system
       String.starts_with?(path, "/setup") -> :system
       String.starts_with?(path, "/admin") -> :system
+      String.starts_with?(path, "/permissions") -> :system
       String.starts_with?(path, "/system_info") -> :system
       String.starts_with?(path, "/cron_upload") -> :system
       String.starts_with?(path, "/blotter/editor") -> :system
@@ -222,6 +223,7 @@ defmodule ShimmiePhoenixWeb.Plugs.LegacyChrome do
         {"/auto_tag/list", "Auto-Tag"},
         {"/alias/list", "Aliases"},
         {"/admin", "Board Admin"},
+        {"/permissions", "Permissions Editor"},
         if_enabled(enabled, "ipban", {"/ip_ban/list", "IP Bans"}),
         if_enabled(enabled, "source_history", {"/source_history/all/1", "Source Changes"}),
         if_enabled(enabled, "tag_history", {"/tag_history/all/1", "Tag Changes"}),

@@ -6,6 +6,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
   alias ShimmiePhoenix.Site.Index
   alias ShimmiePhoenix.Site.IPBans
   alias ShimmiePhoenix.Site.Pages
+  alias ShimmiePhoenix.Site.Permissions
   alias ShimmiePhoenix.Site.PrivateMessages
   alias ShimmiePhoenix.Site.Posts
   alias ShimmiePhoenix.Site.Approval
@@ -508,6 +509,46 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
       conn
       |> assign(:page_title, "Admin Tools")
       |> render(:admin_tools)
+    else
+      _ -> send_resp(conn, 403, "Permission Denied")
+    end
+  end
+
+  def admin_permissions(conn, _params), do: redirect(conn, to: "/permissions")
+
+  def permissions(conn, params) do
+    with {:ok, user} <- current_user(conn),
+         true <- admin?(user) do
+      conn
+      |> assign(:page_title, "Permissions Editor")
+      |> render(:permissions,
+        rows: Permissions.editor_rows(),
+        known_classes: Permissions.known_classes(),
+        notice: params["notice"],
+        error: params["error"]
+      )
+    else
+      _ -> send_resp(conn, 403, "Permission Denied")
+    end
+  end
+
+  def permissions_save(conn, params) do
+    with {:ok, user} <- current_user(conn),
+         true <- admin?(user) do
+      rule_values = Map.get(params, "rules", %{})
+
+      results =
+        for %{id: id} <- Permissions.rules(), reduce: [] do
+          acc ->
+            value = Map.get(rule_values, id, "")
+            [{id, Permissions.set_classes(id, value)} | acc]
+        end
+
+      if Enum.all?(results, fn {_id, result} -> result == :ok end) do
+        redirect(conn, to: "/permissions?notice=" <> URI.encode_www_form("Permissions saved"))
+      else
+        redirect(conn, to: "/permissions?error=" <> URI.encode_www_form("Unable to save rules"))
+      end
     else
       _ -> send_resp(conn, 403, "Permission Denied")
     end

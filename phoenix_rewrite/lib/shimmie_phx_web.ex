@@ -17,7 +17,7 @@ defmodule ShimmiePhoenixWeb do
   those modules here.
   """
 
-  def static_paths, do: ~w(assets ext fonts images favicon.ico robots.txt)
+  def static_paths, do: ~w(assets ext fonts images favicon.ico apple-touch-icon.png robots.txt)
 
   def router do
     quote do

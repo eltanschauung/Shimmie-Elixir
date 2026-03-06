@@ -4,6 +4,7 @@ defmodule ShimmiePhoenix.Site.TagEdit do
   """
 
   alias ShimmiePhoenix.Site
+  alias ShimmiePhoenix.Site.Permissions
   alias ShimmiePhoenix.Site.Posts
   alias ShimmiePhoenix.Site.Store
   alias ShimmiePhoenix.Site.TagRules
@@ -11,15 +12,11 @@ defmodule ShimmiePhoenix.Site.TagEdit do
 
   require Logger
 
-  @tag_edit_classes MapSet.new(["admin", "taggers", "tag-dono", "tag_dono", "moderator"])
   @sqlite_separator <<31>>
   @sqlite_row_separator <<30>>
 
   def can_edit_tags?(actor) do
-    actor_id(actor) > 0 and
-      (actor
-       |> actor_class()
-       |> then(&MapSet.member?(@tag_edit_classes, &1)))
+    actor_id(actor) > 0 and Permissions.allowed?(:tag_edit, actor_class(actor))
   end
 
   def update_tags(image_id, tags_string, actor, remote_ip) do

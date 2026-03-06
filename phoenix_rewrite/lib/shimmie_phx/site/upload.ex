@@ -6,6 +6,7 @@ defmodule ShimmiePhoenix.Site.Upload do
   alias ShimmiePhoenix.Repo
   alias ShimmiePhoenix.Site
   alias ShimmiePhoenix.Site.Approval
+  alias ShimmiePhoenix.Site.Permissions
   alias ShimmiePhoenix.Site.Store
   alias ShimmiePhoenix.Site.TagRules
 
@@ -43,22 +44,16 @@ defmodule ShimmiePhoenix.Site.Upload do
       MapSet.member?(@upload_denied_classes, normalized) ->
         false
 
-      anonymous_actor?(%{id: id, class: normalized}) ->
-        anonymous_uploads_enabled?()
-
       true ->
-        true
+        Permissions.allowed?(:upload, normalized)
     end
   end
 
   def can_upload?(_), do: false
 
   def upload_denied_message(actor) do
-    if anonymous_actor?(actor) and not anonymous_uploads_enabled?() do
-      "Anonymous uploads are disabled by board settings"
-    else
-      "Your account class does not have upload permission"
-    end
+    if anonymous_actor?(actor), do: "Anonymous uploads are disabled by permissions",
+      else: "Your account class does not have upload permission"
   end
 
   def create_file_upload(
@@ -227,14 +222,6 @@ defmodule ShimmiePhoenix.Site.Upload do
     |> to_string()
     |> String.trim()
     |> String.downcase()
-  end
-
-  defp anonymous_uploads_enabled? do
-    Store.get_config("upload_anon", "1")
-    |> to_string()
-    |> String.trim()
-    |> String.downcase()
-    |> then(&(&1 in ["1", "true", "yes", "on", "y"]))
   end
 
   defp anonymous_actor?(%{id: id, class: class}) when is_integer(id) do

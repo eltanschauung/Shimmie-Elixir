@@ -4,6 +4,7 @@ defmodule ShimmiePhoenix.Site.Comments do
   """
 
   alias ShimmiePhoenix.Site
+  alias ShimmiePhoenix.Site.Permissions
   alias ShimmiePhoenix.Site.Store
   alias ShimmiePhoenix.Site.TagEdit
   alias ShimmiePhoenix.Site.Users
@@ -12,34 +13,20 @@ defmodule ShimmiePhoenix.Site.Comments do
   require Logger
 
   @sqlite_separator <<31>>
-  @delete_comment_classes MapSet.new(["admin", "tag-dono", "tag_dono"])
-  @view_ip_classes MapSet.new(["admin"])
-  @ban_ip_classes MapSet.new(["admin"])
-  @deny_create_comment_classes MapSet.new(["ghost"])
-
   def can_delete_comment?(actor) do
-    actor_id(actor) > 0 and
-      (actor
-       |> actor_class()
-       |> then(&MapSet.member?(@delete_comment_classes, &1)))
+    actor_id(actor) > 0 and Permissions.allowed?(:comment_delete, actor_class(actor))
   end
 
   def can_create_comment?(actor) do
-    not ghost_actor?(actor)
+    actor_id(actor) > 0 and Permissions.allowed?(:comment_create, actor_class(actor))
   end
 
   def can_view_ip?(actor) do
-    actor_id(actor) > 0 and
-      (actor
-       |> actor_class()
-       |> then(&MapSet.member?(@view_ip_classes, &1)))
+    actor_id(actor) > 0 and Permissions.allowed?(:comment_view_ip, actor_class(actor))
   end
 
   def can_ban_ip?(actor) do
-    actor_id(actor) > 0 and
-      (actor
-       |> actor_class()
-       |> then(&MapSet.member?(@ban_ip_classes, &1)))
+    actor_id(actor) > 0 and Permissions.allowed?(:comment_ban_ip, actor_class(actor))
   end
 
   def anonymous_user?(actor), do: anonymous_actor?(actor)
@@ -370,21 +357,6 @@ defmodule ShimmiePhoenix.Site.Comments do
 
       _ ->
         true
-    end
-  end
-
-  defp ghost_actor?(actor) do
-    case actor do
-      nil ->
-        false
-
-      %{class: class} ->
-        class
-        |> normalize_class()
-        |> then(&MapSet.member?(@deny_create_comment_classes, &1))
-
-      _ ->
-        false
     end
   end
 

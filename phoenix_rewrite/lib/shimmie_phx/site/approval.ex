@@ -4,16 +4,15 @@ defmodule ShimmiePhoenix.Site.Approval do
   """
 
   alias ShimmiePhoenix.Site
+  alias ShimmiePhoenix.Site.Permissions
   alias ShimmiePhoenix.Site.Store
   alias ShimmiePhoenix.Repo
 
   require Logger
 
   @sqlite_separator <<31>>
-  @approver_classes MapSet.new(["admin", "tag-dono", "tag_dono", "taggers", "moderator"])
-
   def can_approve?(%{id: id, class: class}) when is_integer(id) and id > 0 do
-    approval_enabled?() and approver_class?(class)
+    approval_enabled?() and Permissions.allowed?(:approve, class)
   end
 
   def can_approve?(_), do: false
@@ -305,14 +304,6 @@ defmodule ShimmiePhoenix.Site.Approval do
       |> String.downcase()
 
     normalized in ["1", "true", "t", "yes", "y", "on"]
-  end
-
-  defp approver_class?(class) do
-    class
-    |> to_string()
-    |> String.trim()
-    |> String.downcase()
-    |> then(&MapSet.member?(@approver_classes, &1))
   end
 
   defp actor_id(%{id: id}) when is_integer(id) and id > 0, do: id

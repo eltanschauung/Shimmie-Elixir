@@ -83,6 +83,8 @@ defmodule ShimmiePhoenixWeb.Router do
     get "/ext_doc/:topic", LegacyPagesController, :ext_doc_topic
     get "/ext_manager", LegacyPagesController, :ext_manager
     get "/admin", LegacyPagesController, :admin_tools
+    get "/admin/permissions", LegacyPagesController, :admin_permissions
+    get "/permissions", LegacyPagesController, :permissions
     get "/cron_upload", LegacyPagesController, :cron_upload
     get "/blotter/editor", LegacyPagesController, :blotter_editor
     get "/ip_ban/list", LegacyPagesController, :ip_ban_list
@@ -141,6 +143,7 @@ defmodule ShimmiePhoenixWeb.Router do
     post "/note/nuke_notes", PostAdminController, :nuke_notes
     post "/note/nuke_requests", PostAdminController, :nuke_requests
     post "/upload", LegacyPagesController, :upload_post
+    post "/permissions/save", LegacyPagesController, :permissions_save
     post "/blotter/add", LegacyPagesController, :blotter_add
     post "/ip_ban/create", LegacyPagesController, :ip_ban_create
     post "/ip_ban/delete", LegacyPagesController, :ip_ban_delete

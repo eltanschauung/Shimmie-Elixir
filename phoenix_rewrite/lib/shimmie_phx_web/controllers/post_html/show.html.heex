@@ -459,7 +459,13 @@
           <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
           <input type="hidden" name="image_id" value={@post.id} />
           <input type="hidden" name="hash" value={@comment_form_hash} />
-          <textarea id={"comment_on_#{@post.id}"} name="comment" rows="5" cols="50"></textarea>
+          <textarea
+            id={"comment_on_#{@post.id}"}
+            name="comment"
+            rows="5"
+            cols="50"
+            placeholder={@comment_placeholder || "Add your comment"}
+          ></textarea>
           <%= if @show_captcha do %>
             <div class="g-recaptcha" data-sitekey={@recaptcha_key}></div>
             <script type="text/javascript" src="https://www.google.com/recaptcha/api.js">

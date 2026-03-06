@@ -81,6 +81,7 @@ defmodule ShimmiePhoenixWeb.PostController do
             |> assign(:meta_og_image, absolute_url(conn, Posts.thumb_route(post)))
             |> assign(:meta_og_url, absolute_url(conn, "/post/view/#{id}"))
             |> render(:show,
+              comment_placeholder: normalize_comment_placeholder(conn.params["error"]),
               post: post,
               owner_name: owner_name,
               tag_rows: tag_rows,
@@ -115,6 +116,18 @@ defmodule ShimmiePhoenixWeb.PostController do
 
       :error ->
         send_resp(conn, 404, "Not Found")
+    end
+  end
+
+  defp normalize_comment_placeholder(nil), do: "Add your comment"
+
+  defp normalize_comment_placeholder(value) do
+    value
+    |> to_string()
+    |> String.trim()
+    |> case do
+      "" -> "Add your comment"
+      message -> message
     end
   end
 

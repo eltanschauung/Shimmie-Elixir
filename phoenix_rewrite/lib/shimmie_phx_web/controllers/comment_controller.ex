@@ -2,6 +2,7 @@ defmodule ShimmiePhoenixWeb.CommentController do
   use ShimmiePhoenixWeb, :controller
 
   alias ShimmiePhoenix.Site.Comments
+  alias ShimmiePhoenix.Site.TelegramAlerts
   alias ShimmiePhoenix.Site.Users
 
   def add(conn, params) do
@@ -10,6 +11,7 @@ defmodule ShimmiePhoenixWeb.CommentController do
 
     case Comments.add(params, actor, remote_ip) do
       {:ok, image_id} ->
+        _ = TelegramAlerts.notify_comment_added(image_id, actor, to_string(params["comment"] || ""))
         redirect(conn, to: "/post/view/#{image_id}#comment_on_#{image_id}")
 
       {:error, :invalid_image_id} ->
@@ -17,6 +19,23 @@ defmodule ShimmiePhoenixWeb.CommentController do
 
       {:error, :post_not_found} ->
         send_resp(conn, 404, "Not Found")
+
+      {:error, reason}
+      when reason in [
+             :empty_comment,
+             :comment_too_long,
+             :comment_too_repetitive,
+             :form_out_of_date,
+             :duplicate_comment,
+             :rate_limited
+           ] ->
+        image_id = parse_image_id(params["image_id"])
+
+        redirect(
+          conn,
+          to:
+            "/post/view/#{image_id}?error=#{URI.encode_www_form(error_message(reason))}#comment_on_#{image_id}"
+        )
 
       {:error, reason} ->
         send_resp(conn, 403, error_message(reason))

@@ -25,6 +25,25 @@ defmodule ShimmiePhoenixWeb.MediaController do
     end
   end
 
+  def legacy_image(conn, %{"hash" => hash}) do
+    conn = Plug.Conn.fetch_session(conn)
+    actor = conn.assigns[:legacy_user] || Users.current_user(conn)
+
+    with post when is_map(post) <- Posts.get_post_by_hash(hash),
+         true <- Approval.can_view_image?(post.id, actor),
+         path <- Posts.media_path(post),
+         true <- regular_non_symlink_file?(path) do
+      filename = safe_header_filename(Posts.download_filename(post))
+
+      conn
+      |> put_resp_content_type(Posts.image_mime(post))
+      |> put_resp_header("content-disposition", ~s(inline; filename="#{filename}"))
+      |> send_file(200, path)
+    else
+      _ -> send_resp(conn, 404, "Not Found")
+    end
+  end
+
   def thumb(conn, %{"image_id" => image_id, "filename" => filename}) do
     conn = Plug.Conn.fetch_session(conn)
     actor = conn.assigns[:legacy_user] || Users.current_user(conn)

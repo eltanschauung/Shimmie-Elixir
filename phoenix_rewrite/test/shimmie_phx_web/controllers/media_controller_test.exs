@@ -63,6 +63,17 @@ defmodule ShimmiePhoenixWeb.MediaControllerTest do
     assert get_resp_header(conn, "content-type") |> List.first() =~ "image/png"
   end
 
+  test "GET /_images/:hash/:filename serves original media via legacy hash route", %{conn: conn} do
+    conn =
+      get(
+        conn,
+        "/_images/abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/1907%20-%20forward_facing%20sample.png"
+      )
+
+    assert response(conn, 200) == "PNGDATA"
+    assert get_resp_header(conn, "content-type") |> List.first() =~ "image/png"
+  end
+
   test "GET /thumb/:id/:filename serves thumbnail", %{conn: conn} do
     conn = get(conn, "/thumb/202/thumb")
     assert response(conn, 200) == "THUMBDATA"

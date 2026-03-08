@@ -21,6 +21,24 @@ defmodule ShimmiePhoenix.Site.Posts do
 
   def get_post(_), do: nil
 
+  def get_post_by_hash(hash) when is_binary(hash) do
+    normalized =
+      hash
+      |> String.trim()
+      |> String.downcase()
+
+    if valid_hash?(normalized) do
+      case sqlite_db_path() do
+        nil -> get_post_repo_by_hash(normalized)
+        path -> get_post_sqlite_by_hash(path, normalized)
+      end
+    else
+      nil
+    end
+  end
+
+  def get_post_by_hash(_), do: nil
+
   def image_route(post), do: "/image/#{post.id}/#{URI.encode(download_filename(post))}"
 
   def download_filename(post) when is_map(post) do
@@ -303,6 +321,39 @@ defmodule ShimmiePhoenix.Site.Posts do
     SELECT id, hash, ext, filename, width, height, filesize, COALESCE(source, ''), posted, COALESCE(owner_ip, '')
     FROM images
     WHERE id = #{id}
+    LIMIT 1
+    """
+
+    with [row | _] <- sqlite_rows(path, query, parts: 10),
+         post <- sqlite_row_to_post(row),
+         true <- is_map(post) do
+      with_tags_sqlite(path, post)
+    else
+      _ -> nil
+    end
+  end
+
+  defp get_post_repo_by_hash(hash) do
+    case Repo.query(
+           "SELECT id, hash, ext, filename, width, height, filesize, source, posted, COALESCE(owner_ip, '') " <>
+             "FROM images WHERE hash = $1 LIMIT 1",
+           [hash]
+         ) do
+      {:ok, %{rows: [row]}} ->
+        row
+        |> row_to_post()
+        |> with_tags_repo()
+
+      _ ->
+        nil
+    end
+  end
+
+  defp get_post_sqlite_by_hash(path, hash) do
+    query = """
+    SELECT id, hash, ext, filename, width, height, filesize, COALESCE(source, ''), posted, COALESCE(owner_ip, '')
+    FROM images
+    WHERE lower(hash) = '#{hash}'
     LIMIT 1
     """
 

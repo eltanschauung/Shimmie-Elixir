@@ -48,6 +48,7 @@ defmodule ShimmiePhoenixWeb.Router do
     get "/ext/*path", LegacyAssetController, :ext
     get "/themes/*path", LegacyAssetController, :themes
 
+    get "/_images/:hash/:filename", MediaController, :legacy_image
     get "/image/:image_id/:filename", MediaController, :image
     get "/thumb/:image_id/:filename", MediaController, :thumb
   end

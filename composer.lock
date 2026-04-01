@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "6a4b5ad82983526bd0c4be833c3318fc",
+    "content-hash": "1997415579ac0cb7caca0b0ab513261a",
     "packages": [
         {
             "name": "bower-asset/jquery",
@@ -1003,20 +1003,20 @@
         },
         {
             "name": "shish/microotlp",
-            "version": "v0.0.15",
+            "version": "v1.0.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/shish/microotlp.git",
-                "reference": "33e186d0dac72984187e369b871d798c963b95b2"
+                "reference": "2e0e54520e851961de7a2ab9d26c79593bbec867"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/shish/microotlp/zipball/33e186d0dac72984187e369b871d798c963b95b2",
-                "reference": "33e186d0dac72984187e369b871d798c963b95b2",
+                "url": "https://api.github.com/repos/shish/microotlp/zipball/2e0e54520e851961de7a2ab9d26c79593bbec867",
+                "reference": "2e0e54520e851961de7a2ab9d26c79593bbec867",
                 "shasum": ""
             },
             "require": {
-                "php": "^8.2"
+                "php": "^8.4"
             },
             "require-dev": {
                 "friendsofphp/php-cs-fixer": "^3.89",
@@ -1050,9 +1050,9 @@
             ],
             "support": {
                 "issues": "https://github.com/shish/microotlp/issues",
-                "source": "https://github.com/shish/microotlp/tree/v0.0.15"
+                "source": "https://github.com/shish/microotlp/tree/v1.0.0"
             },
-            "time": "2026-02-20T21:20:10+00:00"
+            "time": "2026-03-13T15:52:13+00:00"
         },
         {
             "name": "symfony/console",
@@ -5795,5 +5795,5 @@
     "platform-overrides": {
         "php": "8.4.0"
     },
-    "plugin-api-version": "2.6.0"
+    "plugin-api-version": "2.9.0"
 }

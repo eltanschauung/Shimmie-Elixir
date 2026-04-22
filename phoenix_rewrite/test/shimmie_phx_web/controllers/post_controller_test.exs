@@ -242,6 +242,16 @@ defmodule ShimmiePhoenixWeb.PostControllerTest do
     assert redirected_to(conn, 302) == "/post/view/101"
   end
 
+  test "GET /post/list/:search/:page matches mixed-case tags case-insensitively", %{conn: conn} do
+    Repo.query!("UPDATE tags SET tag = $1 WHERE id = $2", ["Peter_Griffin", 1])
+
+    conn = get(conn, "/post/list/Peter_Griffin/1")
+    assert redirected_to(conn, 302) == "/post/view/101"
+
+    conn = Phoenix.ConnTest.build_conn() |> get("/post/list/peter_griffin/1")
+    assert redirected_to(conn, 302) == "/post/view/101"
+  end
+
   test "GET /post/list with query search redirects to canonical path", %{conn: conn} do
     conn = get(conn, "/post/list", %{"search" => "demo_tag"})
     assert redirected_to(conn, 302) == "/post/list/demo_tag/1"

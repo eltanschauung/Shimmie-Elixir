@@ -299,7 +299,7 @@ defmodule ShimmiePhoenix.Site.Index do
           like = String.replace(pattern, "*", "%")
           {["tag ILIKE $#{idx}" | acc_frags], acc_params ++ [like], idx + 1}
         else
-          {["tag = $#{idx}" | acc_frags], acc_params ++ [pattern], idx + 1}
+          {["LOWER(tag) = LOWER($#{idx})" | acc_frags], acc_params ++ [pattern], idx + 1}
         end
       end)
 
@@ -329,7 +329,7 @@ defmodule ShimmiePhoenix.Site.Index do
       {"images.id NOT IN (SELECT it.image_id FROM image_tags it JOIN tags t ON t.id = it.tag_id WHERE t.tag ILIKE $#{idx})",
        [like]}
     else
-      {"images.id NOT IN (SELECT it.image_id FROM image_tags it JOIN tags t ON t.id = it.tag_id WHERE t.tag = $#{idx})",
+      {"images.id NOT IN (SELECT it.image_id FROM image_tags it JOIN tags t ON t.id = it.tag_id WHERE LOWER(t.tag) = LOWER($#{idx}))",
        [tag]}
     end
   end
@@ -349,7 +349,7 @@ defmodule ShimmiePhoenix.Site.Index do
       {"images.id IN (SELECT it.image_id FROM image_tags it JOIN tags t ON t.id = it.tag_id WHERE t.tag ILIKE $#{idx})",
        [like]}
     else
-      {"images.id IN (SELECT it.image_id FROM image_tags it JOIN tags t ON t.id = it.tag_id WHERE t.tag = $#{idx})",
+      {"images.id IN (SELECT it.image_id FROM image_tags it JOIN tags t ON t.id = it.tag_id WHERE LOWER(t.tag) = LOWER($#{idx}))",
        [tag]}
     end
   end
@@ -498,7 +498,7 @@ defmodule ShimmiePhoenix.Site.Index do
         if String.contains?(pattern, "*") do
           "tag LIKE '#{escape_sqlite_string(String.replace(pattern, "*", "%"))}' ESCAPE '\\'"
         else
-          "tag = '#{escape_sqlite_string(pattern)}'"
+          "tag = '#{escape_sqlite_string(pattern)}' COLLATE NOCASE"
         end
       end)
       |> Enum.reject(&(&1 == ""))
@@ -511,7 +511,7 @@ defmodule ShimmiePhoenix.Site.Index do
       like = String.replace(tag, "*", "%") |> escape_sqlite_string()
       "LIKE '#{like}' ESCAPE '\\'"
     else
-      "= '#{escape_sqlite_string(tag)}'"
+      "= '#{escape_sqlite_string(tag)}' COLLATE NOCASE"
     end
   end
 

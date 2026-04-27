@@ -17,6 +17,10 @@ defmodule ShimmiePhoenix.Site.Users do
   @site_user_name_key :site_user_name
   @legacy_user_id_key :legacy_user_id
   @legacy_user_name_key :legacy_user_name
+  @login_throttle_table :shimmie_login_throttle
+  @login_throttle_owner :shimmie_login_throttle_owner
+  @login_throttle_window_ms 15 * 60 * 1000
+  @login_throttle_max_failures 10
 
   def signup_enabled?, do: config_bool("login_signup_enabled", true)
   def user_email_required?, do: config_bool("user_email_required", false)
@@ -103,32 +107,43 @@ defmodule ShimmiePhoenix.Site.Users do
   def login(name, pass, remote_ip) when is_binary(name) and is_binary(pass) do
     backend = active_backend()
     trimmed_name = String.trim(name)
+    throttle_key = login_throttle_key(trimmed_name, remote_ip)
 
     Logger.info("auth.login attempt user=#{trimmed_name} backend=#{backend}")
 
-    case user_by_name(String.trim(name)) ||
-           user_by_name(String.replace(String.trim(name), " ", "_")) do
-      nil ->
-        Logger.warning(
-          "auth.login failure user=#{trimmed_name} backend=#{backend} reason=user_not_found"
-        )
+    with :ok <- login_throttle_allowed?(throttle_key) do
+      case user_by_name(trimmed_name) ||
+             user_by_name(String.replace(trimmed_name, " ", "_")) do
+        nil ->
+          record_login_failure(throttle_key)
 
-        {:error, :invalid_credentials}
-
-      user ->
-        if valid_password?(user, pass) do
-          Logger.info(
-            "auth.login success user=#{user.name} class=#{user.class} backend=#{backend}"
-          )
-
-          {:ok, user, session_id(user.passhash, remote_ip)}
-        else
           Logger.warning(
-            "auth.login failure user=#{trimmed_name} backend=#{backend} reason=bad_password"
+            "auth.login failure user=#{trimmed_name} backend=#{backend} reason=user_not_found"
           )
 
           {:error, :invalid_credentials}
-        end
+
+        user ->
+          case password_status(user, pass) do
+            {:ok, authed_user} ->
+              clear_login_failures(throttle_key)
+
+              Logger.info(
+                "auth.login success user=#{authed_user.name} class=#{authed_user.class} backend=#{backend}"
+              )
+
+              {:ok, authed_user, session_id(authed_user.passhash, remote_ip)}
+
+            :error ->
+              record_login_failure(throttle_key)
+
+              Logger.warning(
+                "auth.login failure user=#{trimmed_name} backend=#{backend} reason=bad_password"
+              )
+
+              {:error, :invalid_credentials}
+          end
+      end
     end
   end
 
@@ -1132,28 +1147,139 @@ defmodule ShimmiePhoenix.Site.Users do
       else: {:error, :permission_denied}
   end
 
-  defp valid_password?(%{name: name, passhash: passhash}, pass) when is_binary(passhash) do
+  defp password_status(%{name: name, passhash: passhash} = user, pass)
+       when is_binary(passhash) do
     legacy_md5 = md5_hex(String.downcase(name) <> pass)
 
     cond do
       passhash == "" ->
-        false
+        :error
 
       passhash == legacy_md5 ->
-        true
+        migrate_legacy_password(user, pass)
 
       String.starts_with?(passhash, "$2") ->
-        Bcrypt.verify_pass(pass, normalize_bcrypt_hash(passhash))
+        if Bcrypt.verify_pass(pass, normalize_bcrypt_hash(passhash)) do
+          {:ok, user}
+        else
+          :error
+        end
 
       true ->
-        false
+        :error
     end
   end
 
-  defp valid_password?(_, _), do: false
+  defp password_status(_, _), do: :error
+
+  defp migrate_legacy_password(user, pass) do
+    new_hash = Bcrypt.hash_pwd_salt(pass)
+
+    case update_user_password(user.id, new_hash) do
+      {:ok, _} -> {:ok, %{user | passhash: new_hash}}
+      _ -> {:ok, user}
+    end
+  end
 
   defp normalize_bcrypt_hash("$2y$" <> rest), do: "$2b$" <> rest
   defp normalize_bcrypt_hash(value), do: value
+
+  defp login_throttle_key(name, remote_ip) do
+    {String.downcase(String.trim(name)), to_string(remote_ip || "")}
+  end
+
+  defp login_throttle_allowed?(key) do
+    table = login_throttle_table()
+    now = System.monotonic_time(:millisecond)
+
+    case :ets.lookup(table, key) do
+      [{^key, count, first_at}]
+      when now - first_at < @login_throttle_window_ms and
+             count >= @login_throttle_max_failures ->
+        {:error, :rate_limited}
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp record_login_failure(key) do
+    table = login_throttle_table()
+    now = System.monotonic_time(:millisecond)
+
+    case :ets.lookup(table, key) do
+      [{^key, count, first_at}] when now - first_at < @login_throttle_window_ms ->
+        :ets.insert(table, {key, count + 1, first_at})
+
+      _ ->
+        :ets.insert(table, {key, 1, now})
+    end
+
+    :ok
+  end
+
+  defp clear_login_failures(key) do
+    :ets.delete(login_throttle_table(), key)
+    :ok
+  end
+
+  defp login_throttle_table do
+    case :ets.whereis(@login_throttle_table) do
+      :undefined ->
+        ensure_login_throttle_owner()
+        :ets.whereis(@login_throttle_table)
+
+      tid ->
+        tid
+    end
+  end
+
+  defp ensure_login_throttle_owner do
+    case Process.whereis(@login_throttle_owner) do
+      nil ->
+        parent = self()
+
+        pid =
+          spawn(fn ->
+            try do
+              :ets.new(@login_throttle_table, [
+                :named_table,
+                :public,
+                read_concurrency: true,
+                write_concurrency: true
+              ])
+            rescue
+              ArgumentError -> :ok
+            end
+
+            send(parent, :login_throttle_ready)
+            login_throttle_owner_loop()
+          end)
+
+        _ =
+          try do
+            Process.register(pid, @login_throttle_owner)
+          rescue
+            ArgumentError -> :ok
+          end
+
+        receive do
+          :login_throttle_ready -> :ok
+        after
+          100 -> :ok
+        end
+
+      _pid ->
+        :ok
+    end
+  end
+
+  defp login_throttle_owner_loop do
+    receive do
+      :stop -> :ok
+      _ -> login_throttle_owner_loop()
+    end
+  end
 
   defp valid_session?(%{passhash: passhash}, token, remote_ip) do
     token == session_id(passhash, remote_ip)

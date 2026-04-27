@@ -82,7 +82,7 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
       |> init_test_session(%{site_user_id: 2})
       |> post("/comment/add", %{"image_id" => "101", "comment" => " \n\t"})
 
-    assert response(conn, 403) =~ "Comments need text..."
+    assert redirected_to(conn) == "/post/view/101?error=Comments+need+text...#comment_on_101"
   end
 
   test "POST /comment/add rejects anonymous request with invalid hash", %{conn: conn} do
@@ -93,10 +93,47 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
         "hash" => "bad-hash"
       })
 
-    assert response(conn, 403) =~ "Comment submission form is out of date"
+    assert redirected_to(conn) ==
+             "/post/view/101?error=Comment+submission+form+is+out+of+date%3B+refresh+and+try+again~#comment_on_101"
   end
 
-  test "GET /comment/delete/:comment_id/:image_id deletes comment for admin", %{conn: conn} do
+  test "POST /comment/add rejects users without comment permission", %{conn: conn} do
+    Repo.query!("INSERT INTO config(name, value) VALUES ($1, $2)", [
+      "perm_comment_create",
+      "admin"
+    ])
+
+    conn =
+      conn
+      |> init_test_session(%{site_user_id: 2})
+      |> post("/comment/add", %{"image_id" => "101", "comment" => "blocked comment"})
+
+    assert response(conn, 403) =~ "Permission Denied"
+    assert Repo.query!("SELECT COUNT(*) FROM comments").rows == [[0]]
+  end
+
+  test "POST /comment/add enforces anonymous CAPTCHA when configured", %{conn: conn} do
+    Repo.query!("INSERT INTO config(name, value) VALUES ($1, $2)", ["comment_captcha", "Y"])
+
+    Repo.query!("INSERT INTO config(name, value) VALUES ($1, $2)", [
+      "api_recaptcha_privkey",
+      "secret"
+    ])
+
+    valid_hash = Comments.form_hash("127.0.0.1")
+
+    conn =
+      post(conn, "/comment/add", %{
+        "image_id" => "101",
+        "comment" => "captcha comment",
+        "hash" => valid_hash
+      })
+
+    assert redirected_to(conn) == "/post/view/101?error=Error+in+captcha#comment_on_101"
+    assert Repo.query!("SELECT COUNT(*) FROM comments").rows == [[0]]
+  end
+
+  test "POST /comment/delete/:comment_id/:image_id deletes comment for admin", %{conn: conn} do
     Repo.query!(
       "INSERT INTO comments(id, image_id, owner_id, owner_ip, posted, comment) VALUES ($1, $2, $3, $4, $5, $6)",
       [501, 101, 2, "127.0.0.1", ~N[2026-01-01 13:00:00], "delete me"]
@@ -105,14 +142,14 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
     conn =
       conn
       |> init_test_session(%{site_user_id: 3})
-      |> get("/comment/delete/501/101")
+      |> post("/comment/delete/501/101")
 
     assert redirected_to(conn) == "/post/view/101"
 
     assert Repo.query!("SELECT COUNT(*) FROM comments WHERE id = 501").rows == [[0]]
   end
 
-  test "GET /comment/delete/:comment_id/:image_id deletes comment for Tag-Dono", %{conn: conn} do
+  test "POST /comment/delete/:comment_id/:image_id deletes comment for Tag-Dono", %{conn: conn} do
     Repo.query!(
       "INSERT INTO comments(id, image_id, owner_id, owner_ip, posted, comment) VALUES ($1, $2, $3, $4, $5, $6)",
       [502, 101, 2, "127.0.0.1", ~N[2026-01-01 13:00:00], "delete me too"]
@@ -121,14 +158,14 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
     conn =
       conn
       |> init_test_session(%{site_user_id: 4})
-      |> get("/comment/delete/502/101")
+      |> post("/comment/delete/502/101")
 
     assert redirected_to(conn) == "/post/view/101"
 
     assert Repo.query!("SELECT COUNT(*) FROM comments WHERE id = 502").rows == [[0]]
   end
 
-  test "GET /comment/delete/:comment_id/:image_id denies regular users", %{conn: conn} do
+  test "POST /comment/delete/:comment_id/:image_id denies regular users", %{conn: conn} do
     Repo.query!(
       "INSERT INTO comments(id, image_id, owner_id, owner_ip, posted, comment) VALUES ($1, $2, $3, $4, $5, $6)",
       [503, 101, 2, "127.0.0.1", ~N[2026-01-01 13:00:00], "no delete"]
@@ -137,9 +174,25 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
     conn =
       conn
       |> init_test_session(%{site_user_id: 2})
-      |> get("/comment/delete/503/101")
+      |> post("/comment/delete/503/101")
 
     assert response(conn, 403) =~ "Permission Denied"
     assert Repo.query!("SELECT COUNT(*) FROM comments WHERE id = 503").rows == [[1]]
+  end
+
+  test "GET /comment/delete/:comment_id/:image_id is rejected", %{conn: conn} do
+    Repo.query!(
+      "INSERT INTO comments(id, image_id, owner_id, owner_ip, posted, comment) VALUES ($1, $2, $3, $4, $5, $6)",
+      [504, 101, 2, "127.0.0.1", ~N[2026-01-01 13:00:00], "still here"]
+    )
+
+    conn =
+      conn
+      |> init_test_session(%{site_user_id: 3})
+      |> get("/comment/delete/504/101")
+
+    assert response(conn, 405) == "Method Not Allowed"
+    assert get_resp_header(conn, "allow") == ["POST"]
+    assert Repo.query!("SELECT COUNT(*) FROM comments WHERE id = 504").rows == [[1]]
   end
 end

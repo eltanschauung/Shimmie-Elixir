@@ -70,7 +70,8 @@
           </a>
         <% end %>)
       <% end %>
-      <br /> Date: <time datetime={datetime_attr(@post.posted)}><%= format_post_date(@post.posted) %></time>
+      <br /> Date:
+      <time datetime={datetime_attr(@post.posted)}><%= format_post_date(@post.posted) %></time>
       <br />
       Size: <%= human_filesize(@post.filesize) %> (<%= @post.width %>x<%= @post.height %>)<br />
       Type: <%= ShimmiePhoenix.Site.Posts.image_mime(@post) %><br /> Rating: <%= @rating_label %>
@@ -296,12 +297,23 @@
           <tr>
             <th>Uploader</th>
             <td>
-              <a class="username" href={"/user/#{URI.encode(@owner_name)}"}><%= @owner_name %></a><%= if @can_view_uploader_ip and to_string(@uploader_ip || "") != "" do %> (<%= @uploader_ip %><%= if @can_ban_uploader_ip do %>, <a href={
+              <a class="username" href={"/user/#{URI.encode(@owner_name)}"}><%= @owner_name %></a>
+              <%= if @can_view_uploader_ip and to_string(@uploader_ip || "") != "" do %>
+                (<%= @uploader_ip %>
+                <%= if @can_ban_uploader_ip do %>
+                  ,
+                  <a href={
                   "/ip_ban/list?c_ip=#{URI.encode_www_form(@uploader_ip)}" <>
                     "&c_reason=#{URI.encode_www_form("Post posted #{@post.posted}")}" <>
                     "&c_expires=#{URI.encode_www_form("+1 week")}#create"
-                }>Ban</a><% end %>)<% end %>,
-              <time datetime={datetime_attr(@post.posted)}><%= format_post_date(@post.posted) %></time>
+                }>
+                    Ban
+                  </a>
+                <% end %>)
+              <% end %>,
+              <time datetime={datetime_attr(@post.posted)}>
+                <%= format_post_date(@post.posted) %>
+              </time>
             </td>
             <td width="80px" rowspan="4"></td>
           </tr>
@@ -335,7 +347,10 @@
           <tr>
             <th>Source</th>
             <td>
-              <div class="view" style="overflow: hidden; white-space: nowrap; max-width: 350px; text-overflow: ellipsis;">
+              <div
+                class="view"
+                style="overflow: hidden; white-space: nowrap; max-width: 350px; text-overflow: ellipsis;"
+              >
                 <%= if is_binary(@source_href) and @source_href != "" do %>
                   <a href={@source_href}><%= @source_href %></a>
                 <% else %>
@@ -389,10 +404,18 @@
               <%= if @can_edit_post_info do %>
                 <div class="edit">
                   <select name="rating">
-                    <option value="?" selected={to_string(Map.get(@post, :rating, "?")) == "?"}>Unrated</option>
-                    <option value="s" selected={to_string(Map.get(@post, :rating, "?")) == "s"}>Safe</option>
-                    <option value="q" selected={to_string(Map.get(@post, :rating, "?")) == "q"}>Questionable</option>
-                    <option value="e" selected={to_string(Map.get(@post, :rating, "?")) == "e"}>Explicit</option>
+                    <option value="?" selected={to_string(Map.get(@post, :rating, "?")) == "?"}>
+                      Unrated
+                    </option>
+                    <option value="s" selected={to_string(Map.get(@post, :rating, "?")) == "s"}>
+                      Safe
+                    </option>
+                    <option value="q" selected={to_string(Map.get(@post, :rating, "?")) == "q"}>
+                      Questionable
+                    </option>
+                    <option value="e" selected={to_string(Map.get(@post, :rating, "?")) == "e"}>
+                      Explicit
+                    </option>
                   </select>
                 </div>
               <% end %>
@@ -427,26 +450,46 @@
                 <%= comment.owner_name %>
               </a>
               <%= if @can_view_comment_ips and to_string(comment.owner_ip || "") != "" do %>
-                (<%= comment.owner_ip %><%= if @can_ban_comment_ips do %>, <a href={
+                (<%= comment.owner_ip %>
+                <%= if @can_ban_comment_ips do %>
+                  ,
+                  <a href={
                     "/ip_ban/list?c_ip=#{URI.encode_www_form(comment.owner_ip)}" <>
                       "&c_reason=#{URI.encode_www_form("Comment posted #{comment.posted}")}" <>
                       "&c_expires=#{URI.encode_www_form("+1 week")}#create"
-                  }>Ban</a><% end %>)
+                  }>
+                    Ban
+                  </a>
+                <% end %>)
               <% end %>
               <br />
-              <time datetime={datetime_attr(comment.posted)}><%= format_post_date(comment.posted) %></time>
+              <time datetime={datetime_attr(comment.posted)}>
+                <%= format_post_date(comment.posted) %>
+              </time>
               -
               <a href={"javascript: replyTo(#{@post.id}, #{comment.id}, \"#{comment.owner_name}\")"}>
                 Reply
               </a>
               <%= if @can_delete_comments do %>
                 -
-                <a
-                  href={"/comment/delete/#{comment.id}/#{@post.id}"}
-                  onclick="return confirm('Delete this comment?');"
+                <form
+                  action={"/comment/delete/#{comment.id}/#{@post.id}"}
+                  method="POST"
+                  style="display:inline;"
+                  onsubmit="return confirm('Delete this comment?');"
                 >
-                  Del
-                </a>
+                  <input
+                    type="hidden"
+                    name="_csrf_token"
+                    value={Plug.CSRFProtection.get_csrf_token()}
+                  />
+                  <button
+                    type="submit"
+                    style="border:0; background:none; padding:0; color:inherit; text-decoration:underline; cursor:pointer;"
+                  >
+                    Del
+                  </button>
+                </form>
               <% end %>
             </td>
             <td><%= Phoenix.HTML.raw(format_comment_html(comment.comment)) %></td>

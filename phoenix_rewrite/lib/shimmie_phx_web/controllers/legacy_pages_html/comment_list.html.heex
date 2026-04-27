@@ -45,11 +45,17 @@
                         <%= comment.owner_name %>
                       </a>
                       <%= if @can_view_comment_ips and to_string(comment.owner_ip || "") != "" do %>
-                        (<%= comment.owner_ip %><%= if @can_ban_comment_ips do %>, <a href={
+                        (<%= comment.owner_ip %>
+                        <%= if @can_ban_comment_ips do %>
+                          ,
+                          <a href={
                             "/ip_ban/list?c_ip=#{URI.encode_www_form(comment.owner_ip)}" <>
                               "&c_reason=#{URI.encode_www_form("Comment posted #{comment.posted}")}" <>
                               "&c_expires=#{URI.encode_www_form("+1 week")}#create"
-                          }>Ban</a><% end %>)
+                          }>
+                            Ban
+                          </a>
+                        <% end %>)
                       <% end %>
                       <br />
                       <time datetime={datetime_attr(comment.posted)}>
@@ -61,12 +67,24 @@
                       </a>
                       <%= if @can_delete_comments do %>
                         -
-                        <a
-                          href={"/comment/delete/#{comment.id}/#{thread.post.id}"}
-                          onclick="return confirm('Delete this comment?');"
+                        <form
+                          action={"/comment/delete/#{comment.id}/#{thread.post.id}"}
+                          method="POST"
+                          style="display:inline;"
+                          onsubmit="return confirm('Delete this comment?');"
                         >
-                          Del
-                        </a>
+                          <input
+                            type="hidden"
+                            name="_csrf_token"
+                            value={Plug.CSRFProtection.get_csrf_token()}
+                          />
+                          <button
+                            type="submit"
+                            style="border:0; background:none; padding:0; color:inherit; text-decoration:underline; cursor:pointer;"
+                          >
+                            Del
+                          </button>
+                        </form>
                       <% end %>
                     </td>
                     <td><%= Phoenix.HTML.raw(format_comment_html(comment.comment)) %></td>

@@ -65,7 +65,7 @@ defmodule ShimmiePhoenixWeb.Router do
 
     get "/comment/list", LegacyPagesController, :comment_list
     get "/comment/list/:page_num", LegacyPagesController, :comment_list
-    get "/comment/delete/:comment_id/:image_id", CommentController, :delete
+    get "/comment/delete/:comment_id/:image_id", CommentController, :delete_requires_post
     get "/upload", LegacyPagesController, :upload
     get "/tags", LegacyPagesController, :tags_root
     get "/tags/:sub", LegacyPagesController, :tags
@@ -123,6 +123,7 @@ defmodule ShimmiePhoenixWeb.Router do
     pipe_through :compat_mutation
 
     post "/comment/add", CommentController, :add
+    post "/comment/delete/:comment_id/:image_id", CommentController, :delete
     post "/post/set", PostController, :set_info
     post "/tag_edit", PostController, :edit_tags
     post "/favourite/add/:image_id", FavoritesController, :add

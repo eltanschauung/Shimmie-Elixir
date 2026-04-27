@@ -65,8 +65,10 @@ defmodule ShimmiePhoenix.Site.Permissions do
         []
 
       %{config_key: key, default: defaults} ->
-        default_value = Enum.join(defaults, ",")
-        parse_classes(Store.get_config(key, default_value), defaults)
+        case Store.get_config(key, nil) do
+          nil -> normalize_classes(defaults)
+          raw -> parse_classes(raw)
+        end
     end
   end
 
@@ -80,10 +82,10 @@ defmodule ShimmiePhoenix.Site.Permissions do
       nil ->
         {:error, :unknown_rule}
 
-      %{config_key: key, default: defaults} ->
+      %{config_key: key} ->
         normalized =
           raw_value
-          |> parse_classes(defaults)
+          |> parse_classes()
           |> Enum.join(",")
 
         Store.put_config(key, normalized)
@@ -113,30 +115,22 @@ defmodule ShimmiePhoenix.Site.Permissions do
       @rules
       |> Enum.flat_map(& &1.default)
 
-    (from_users ++ from_rules ++ ["anonymous", "user", "admin", "tag-dono", "taggers", "moderator"])
+    (from_users ++
+       from_rules ++ ["anonymous", "user", "admin", "tag-dono", "taggers", "moderator"])
     |> Enum.map(&normalize_class/1)
     |> Enum.reject(&(&1 == ""))
     |> Enum.uniq()
     |> Enum.sort()
   end
 
-  defp parse_classes(raw, defaults) do
-    parsed =
-      raw
-      |> to_string()
-      |> String.split([",", "\n", "\r", "\t", " "], trim: true)
-      |> Enum.map(&normalize_class/1)
-      |> Enum.reject(&(&1 == ""))
-      |> Enum.uniq()
+  defp parse_classes(raw),
+    do: normalize_classes(String.split(to_string(raw), [",", "\n", "\r", "\t", " "], trim: true))
 
-    if parsed == [] do
-      defaults
-      |> Enum.map(&normalize_class/1)
-      |> Enum.reject(&(&1 == ""))
-      |> Enum.uniq()
-    else
-      parsed
-    end
+  defp normalize_classes(values) do
+    values
+    |> Enum.map(&normalize_class/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
   end
 
   defp normalize_class(%{class: class}), do: normalize_class(class)

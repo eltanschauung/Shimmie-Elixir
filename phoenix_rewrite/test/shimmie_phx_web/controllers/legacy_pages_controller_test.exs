@@ -344,6 +344,18 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
     assert redirected_to(conn, 302) == "/post/list"
   end
 
+  test "legacy MD5 passwords are upgraded after successful login" do
+    legacy_hash = :crypto.hash(:md5, "testerlegacy_secret") |> Base.encode16(case: :lower)
+    Repo.query!("UPDATE users SET pass = $1 WHERE id = $2", [legacy_hash, 20])
+
+    assert {:ok, user, _token} =
+             ShimmiePhoenix.Site.Users.login("tester", "legacy_secret", "127.0.0.1")
+
+    assert String.starts_with?(user.passhash, "$2")
+    [[stored_hash]] = Repo.query!("SELECT pass FROM users WHERE id = 20").rows
+    assert stored_hash == user.passhash
+  end
+
   test "user admin login post rejects invalid credentials", %{conn: conn} do
     conn = post(conn, "/user_admin/login", %{"user" => "tester", "pass" => "wrong"})
     assert redirected_to(conn, 302) =~ "/user_admin/login?error="
@@ -362,6 +374,24 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
 
     rows = Repo.query!("SELECT name FROM users WHERE name = 'new_user'").rows
     assert rows == [["new_user"]]
+  end
+
+  test "user admin create post enforces CAPTCHA when configured", %{conn: conn} do
+    Repo.query!("INSERT INTO config(name, value) VALUES ($1, $2)", [
+      "api_recaptcha_privkey",
+      "secret"
+    ])
+
+    conn =
+      post(conn, "/user_admin/create", %{
+        "name" => "captcha_user",
+        "pass1" => "abc123",
+        "pass2" => "abc123",
+        "email" => "captcha_user@example.com"
+      })
+
+    assert redirected_to(conn, 302) == "/user_admin/create?error=Error+in+captcha"
+    assert Repo.query!("SELECT COUNT(*) FROM users WHERE name = 'captcha_user'").rows == [[0]]
   end
 
   test "search API compatibility routes are online", %{conn: conn} do

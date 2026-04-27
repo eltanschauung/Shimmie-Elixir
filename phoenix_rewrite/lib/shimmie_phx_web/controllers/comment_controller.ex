@@ -11,7 +11,9 @@ defmodule ShimmiePhoenixWeb.CommentController do
 
     case Comments.add(params, actor, remote_ip) do
       {:ok, image_id} ->
-        _ = TelegramAlerts.notify_comment_added(image_id, actor, to_string(params["comment"] || ""))
+        _ =
+          TelegramAlerts.notify_comment_added(image_id, actor, to_string(params["comment"] || ""))
+
         redirect(conn, to: "/post/view/#{image_id}#comment_on_#{image_id}")
 
       {:error, :invalid_image_id} ->
@@ -27,7 +29,8 @@ defmodule ShimmiePhoenixWeb.CommentController do
              :comment_too_repetitive,
              :form_out_of_date,
              :duplicate_comment,
-             :rate_limited
+             :rate_limited,
+             :captcha_failed
            ] ->
         image_id = parse_image_id(params["image_id"])
 
@@ -40,6 +43,12 @@ defmodule ShimmiePhoenixWeb.CommentController do
       {:error, reason} ->
         send_resp(conn, 403, error_message(reason))
     end
+  end
+
+  def delete_requires_post(conn, _params) do
+    conn
+    |> put_resp_header("allow", "POST")
+    |> send_resp(405, "Method Not Allowed")
   end
 
   def delete(conn, %{"comment_id" => comment_id, "image_id" => image_id}) do
@@ -77,6 +86,10 @@ defmodule ShimmiePhoenixWeb.CommentController do
 
   defp error_message(:rate_limited),
     do: "You've posted several comments recently; wait a minute and try again..."
+
+  defp error_message(:captcha_failed), do: "Error in captcha"
+
+  defp error_message(:permission_denied), do: "Permission Denied"
 
   defp error_message(_), do: "Comment Blocked"
 

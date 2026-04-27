@@ -2,6 +2,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
   use ShimmiePhoenixWeb, :controller
 
   alias ShimmiePhoenix.Site
+  alias ShimmiePhoenix.Site.Captcha
   alias ShimmiePhoenix.Site.Comments
   alias ShimmiePhoenix.Site.Index
   alias ShimmiePhoenix.Site.IPBans
@@ -31,7 +32,8 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     comment_captcha? = String.upcase(to_string(Store.get_config("comment_captcha", "N"))) == "Y"
 
     show_inline_postbox? =
-      can_create_comments and (Comments.bypass_comment_checks?(current_user) or not comment_captcha?)
+      can_create_comments and
+        (Comments.bypass_comment_checks?(current_user) or not comment_captcha?)
 
     conn
     |> assign(:page_title, "#{Pages.site_title()} - Comments")
@@ -1053,6 +1055,11 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
         redirect(conn,
           to: "/user_admin/login?error=" <> URI.encode_www_form("Invalid username or password")
         )
+
+      {:error, reason} ->
+        redirect(conn,
+          to: "/user_admin/login?error=" <> URI.encode_www_form(error_message(reason))
+        )
     end
   end
 
@@ -1102,13 +1109,11 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
 
   def create_post(conn, params) do
     if Users.signup_enabled?() do
-      case Users.create_user(params, Users.remote_ip_string(conn), %{login: true}) do
-        {:ok, user, session_token} ->
-          conn
-          |> configure_session(renew: true)
-          |> Users.put_user_session(user)
-          |> put_auth_cookies(user.name, session_token)
-          |> redirect(to: "/post/list")
+      remote_ip = Users.remote_ip_string(conn)
+
+      case Captcha.verify_for_signup(params, remote_ip) do
+        :ok ->
+          create_user_and_login(conn, params, remote_ip)
 
         {:error, reason} ->
           redirect(conn,
@@ -1121,6 +1126,22 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
           "/user_admin/create?error=" <>
             URI.encode_www_form("Account creation is currently disabled")
       )
+    end
+  end
+
+  defp create_user_and_login(conn, params, remote_ip) do
+    case Users.create_user(params, remote_ip, %{login: true}) do
+      {:ok, user, session_token} ->
+        conn
+        |> configure_session(renew: true)
+        |> Users.put_user_session(user)
+        |> put_auth_cookies(user.name, session_token)
+        |> redirect(to: "/post/list")
+
+      {:error, reason} ->
+        redirect(conn,
+          to: "/user_admin/create?error=" <> URI.encode_www_form(error_message(reason))
+        )
     end
   end
 
@@ -1652,24 +1673,25 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     file_entries =
       params
       |> Enum.flat_map(fn
-      {"data" <> row, uploads} when is_list(uploads) ->
-        parsed_row = parse_row_number(row)
+        {"data" <> row, uploads} when is_list(uploads) ->
+          parsed_row = parse_row_number(row)
 
-        uploads
-        |> Enum.with_index()
-        |> Enum.flat_map(fn
-          {%Plug.Upload{} = upload, order} ->
-            [%{kind: :file, row: parsed_row, order: order, upload: upload}]
+          uploads
+          |> Enum.with_index()
+          |> Enum.flat_map(fn
+            {%Plug.Upload{} = upload, order} ->
+              [%{kind: :file, row: parsed_row, order: order, upload: upload}]
 
-          _ -> []
-        end)
+            _ ->
+              []
+          end)
 
-      {"data" <> row, %Plug.Upload{} = upload} ->
-        [%{kind: :file, row: parse_row_number(row), order: 0, upload: upload}]
+        {"data" <> row, %Plug.Upload{} = upload} ->
+          [%{kind: :file, row: parse_row_number(row), order: 0, upload: upload}]
 
-      _ ->
-        []
-    end)
+        _ ->
+          []
+      end)
 
     url_entries =
       params
@@ -2287,8 +2309,19 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
       max_age: max_age,
       http_only: true,
       same_site: "Lax",
-      secure: conn.scheme == :https
+      secure: secure_cookie?(conn)
     ]
+  end
+
+  defp secure_cookie?(conn) do
+    Application.get_env(:shimmie_phx, :session_cookie_secure, false) or conn.scheme == :https or
+      forwarded_proto_https?(conn)
+  end
+
+  defp forwarded_proto_https?(conn) do
+    conn
+    |> get_req_header("x-forwarded-proto")
+    |> Enum.any?(&(String.downcase(&1) == "https"))
   end
 
   defp user_list_pages(_params, _page, total_pages) when total_pages <= 0, do: []
@@ -3163,12 +3196,14 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
 
   defp error_message(:invalid_credentials), do: "Invalid username or password"
   defp error_message(:missing_credentials), do: "Missing credentials"
+  defp error_message(:rate_limited), do: "Too many failed login attempts; try again later"
   defp error_message(:invalid_username), do: "Invalid username"
   defp error_message(:username_taken), do: "That username is already taken"
   defp error_message(:password_mismatch), do: "Passwords do not match"
   defp error_message(:invalid_password), do: "Password cannot be empty"
   defp error_message(:email_required), do: "Email address is required"
   defp error_message(:invalid_email), do: "Invalid email address"
+  defp error_message(:captcha_failed), do: "Error in captcha"
   defp error_message(:not_logged_in), do: "You are not logged in"
   defp error_message(:permission_denied), do: "Permission denied"
   defp error_message(:invalid_user_id), do: "Invalid user id"

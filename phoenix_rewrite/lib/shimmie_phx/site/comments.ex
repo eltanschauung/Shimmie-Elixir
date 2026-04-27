@@ -4,6 +4,7 @@ defmodule ShimmiePhoenix.Site.Comments do
   """
 
   alias ShimmiePhoenix.Site
+  alias ShimmiePhoenix.Site.Captcha
   alias ShimmiePhoenix.Site.Permissions
   alias ShimmiePhoenix.Site.Store
   alias ShimmiePhoenix.Site.TagEdit
@@ -18,6 +19,7 @@ defmodule ShimmiePhoenix.Site.Comments do
   end
 
   def can_create_comment?(actor) do
+    actor = effective_actor(actor)
     actor_id(actor) > 0 and Permissions.allowed?(:comment_create, actor_class(actor))
   end
 
@@ -44,16 +46,20 @@ defmodule ShimmiePhoenix.Site.Comments do
 
   def add(params, actor, remote_ip) when is_map(params) do
     backend = db_backend()
+    actor = effective_actor(actor)
 
     with {:ok, image_id} <- parse_image_id(Map.get(params, "image_id")),
+         true <- can_create_comment?(actor),
          {:ok, comment} <- normalize_comment(Map.get(params, "comment")),
          :ok <- ensure_image_exists(image_id, backend),
          :ok <- verify_anonymous_form_hash(actor, params["hash"], remote_ip),
+         :ok <- Captcha.verify_for_comment(actor, params, remote_ip),
          :ok <- verify_anonymous_comment_checks(actor, image_id, comment, remote_ip, backend),
          {:ok, _comment_id} <-
            insert_comment(image_id, actor_user_id(actor), remote_ip, comment, backend) do
       {:ok, image_id}
     else
+      false -> {:error, :permission_denied}
       {:error, _} = error -> error
       _ -> {:error, :create_failed}
     end
@@ -105,7 +111,7 @@ defmodule ShimmiePhoenix.Site.Comments do
   end
 
   defp verify_anonymous_form_hash(actor, supplied_hash, remote_ip) do
-    if bypass_comment_checks?(actor) do
+    if bypass_comment_checks?(actor) or not anonymous_actor?(actor) do
       :ok
     else
       expected = form_hash(remote_ip)
@@ -343,6 +349,9 @@ defmodule ShimmiePhoenix.Site.Comments do
   end
 
   defp actor_user_id(_), do: Users.anonymous_id()
+
+  defp effective_actor(nil), do: %{id: Users.anonymous_id(), class: "anonymous"}
+  defp effective_actor(actor), do: actor
 
   defp anonymous_actor?(actor) do
     anon_id = Users.anonymous_id()

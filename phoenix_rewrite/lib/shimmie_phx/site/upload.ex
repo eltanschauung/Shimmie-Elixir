@@ -52,7 +52,8 @@ defmodule ShimmiePhoenix.Site.Upload do
   def can_upload?(_), do: false
 
   def upload_denied_message(actor) do
-    if anonymous_actor?(actor), do: "Anonymous uploads are disabled by permissions",
+    if anonymous_actor?(actor),
+      do: "Anonymous uploads are disabled by permissions",
       else: "Your account class does not have upload permission"
   end
 
@@ -236,8 +237,10 @@ defmodule ShimmiePhoenix.Site.Upload do
     value = url |> to_string() |> String.trim()
 
     case URI.parse(value) do
-      %URI{scheme: scheme} = uri when scheme in ["http", "https"] ->
-        {:ok, URI.to_string(uri)}
+      %URI{scheme: scheme, host: host} = uri when scheme in ["http", "https"] ->
+        with :ok <- validate_public_url_host(host) do
+          {:ok, URI.to_string(uri)}
+        end
 
       _ ->
         {:error, :invalid_url}
@@ -245,17 +248,21 @@ defmodule ShimmiePhoenix.Site.Upload do
   end
 
   defp fetch_remote_upload(url, max_size) do
-    case transload_engine() do
-      "wget" -> fetch_with_wget(url, max_size)
-      "curl" -> fetch_with_curl(url, max_size)
-      _ -> fetch_with_httpc(url, max_size)
+    with :ok <- validate_public_url_target(url) do
+      case transload_engine() do
+        "wget" -> fetch_with_wget(url, max_size)
+        "curl" -> fetch_with_curl(url, max_size)
+        _ -> fetch_with_httpc(url, max_size)
+      end
     end
   end
 
   defp fetch_with_wget(url, max_size) do
     tmp_path = tmp_transload_path()
 
-    case System.cmd("wget", ["-q", "-O", tmp_path, "--", url], stderr_to_stdout: true) do
+    case System.cmd("wget", ["-q", "--max-redirect=0", "-O", tmp_path, "--", url],
+           stderr_to_stdout: true
+         ) do
       {_out, 0} ->
         finalize_remote_file(tmp_path, url, max_size, nil)
 
@@ -269,7 +276,6 @@ defmodule ShimmiePhoenix.Site.Upload do
     tmp_path = tmp_transload_path()
 
     args = [
-      "-L",
       "--fail",
       "--silent",
       "--show-error",
@@ -293,7 +299,7 @@ defmodule ShimmiePhoenix.Site.Upload do
   defp fetch_with_httpc(url, max_size) do
     ensure_http_started()
     request = {String.to_charlist(url), []}
-    options = [timeout: 30_000, connect_timeout: 10_000, autoredirect: true]
+    options = [timeout: 30_000, connect_timeout: 10_000, autoredirect: false]
 
     case :httpc.request(:get, request, options, body_format: :binary) do
       {:ok, {{_version, status, _reason}, headers, body}} when status in 200..299 ->
@@ -313,6 +319,95 @@ defmodule ShimmiePhoenix.Site.Upload do
         {:error, :transload_failed}
     end
   end
+
+  defp validate_public_url_target(url) do
+    case URI.parse(url) do
+      %URI{scheme: scheme, host: host} when scheme in ["http", "https"] ->
+        validate_public_url_host(host)
+
+      _ ->
+        {:error, :invalid_url}
+    end
+  end
+
+  defp validate_public_url_host(host) when is_binary(host) do
+    host = String.trim(host)
+
+    cond do
+      host == "" ->
+        {:error, :invalid_url}
+
+      String.downcase(host) in ["localhost", "localhost.localdomain"] ->
+        {:error, :invalid_url}
+
+      true ->
+        case resolve_host_addresses(host) do
+          {:ok, addresses} when addresses != [] ->
+            if Enum.all?(addresses, &public_ip?/1), do: :ok, else: {:error, :invalid_url}
+
+          _ ->
+            {:error, :invalid_url}
+        end
+    end
+  end
+
+  defp validate_public_url_host(_), do: {:error, :invalid_url}
+
+  defp resolve_host_addresses(host) do
+    char_host = String.to_charlist(host)
+
+    case :inet.parse_address(char_host) do
+      {:ok, address} ->
+        {:ok, [address]}
+
+      _ ->
+        addresses =
+          [:inet, :inet6]
+          |> Enum.flat_map(fn family ->
+            case :inet.getaddrs(char_host, family) do
+              {:ok, values} -> values
+              _ -> []
+            end
+          end)
+          |> Enum.uniq()
+
+        if addresses == [], do: {:error, :invalid_url}, else: {:ok, addresses}
+    end
+  end
+
+  defp public_ip?({a, _b, _c, _d}) when a in [0, 10, 127], do: false
+  defp public_ip?({100, b, _c, _d}) when b in 64..127, do: false
+  defp public_ip?({169, 254, _c, _d}), do: false
+  defp public_ip?({172, b, _c, _d}) when b in 16..31, do: false
+  defp public_ip?({192, 168, _c, _d}), do: false
+  defp public_ip?({192, 0, 0, _d}), do: false
+  defp public_ip?({198, b, _c, _d}) when b in [18, 19], do: false
+  defp public_ip?({a, _b, _c, _d}) when a >= 224, do: false
+  defp public_ip?({_a, _b, _c, _d}), do: true
+
+  defp public_ip?({0, 0, 0, 0, 0, 0, 0, 0}), do: false
+  defp public_ip?({0, 0, 0, 0, 0, 0, 0, 1}), do: false
+
+  defp public_ip?({0, 0, 0, 0, 0, 65_535, high, low}) do
+    public_ip?({div(high, 256), rem(high, 256), div(low, 256), rem(low, 256)})
+  end
+
+  defp public_ip?({first, _second, _third, _fourth, _fifth, _sixth, _seventh, _eighth})
+       when first in 0xFC00..0xFDFF,
+       do: false
+
+  defp public_ip?({first, _second, _third, _fourth, _fifth, _sixth, _seventh, _eighth})
+       when first in 0xFE80..0xFEBF,
+       do: false
+
+  defp public_ip?({first, _second, _third, _fourth, _fifth, _sixth, _seventh, _eighth})
+       when first in 0xFF00..0xFFFF,
+       do: false
+
+  defp public_ip?({_first, _second, _third, _fourth, _fifth, _sixth, _seventh, _eighth}),
+    do: true
+
+  defp public_ip?(_), do: false
 
   defp finalize_remote_file(tmp_path, url, max_size, header_meta) do
     case File.stat(tmp_path) do

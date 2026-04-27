@@ -414,8 +414,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
     assert redirected_to(get(conn, "/random_image/view"), 302) == "/post/view/200"
   end
 
-  test "fallback keeps unknown legacy path online", %{conn: conn} do
-    body = html_response(get(conn, "/note/list"), 200)
-    assert body =~ "Legacy Route Placeholder"
+  test "unknown legacy paths return 404", %{conn: conn} do
+    assert response(get(conn, "/note/list"), 404)
   end
 end

@@ -70,14 +70,6 @@ defmodule ShimmiePhoenix.Site.Users do
     end
   end
 
-  def session_user_name(conn) do
-    case Plug.Conn.get_session(conn, @site_user_name_key) ||
-           Plug.Conn.get_session(conn, @legacy_user_name_key) do
-      name when is_binary(name) and name != "" -> name
-      _ -> nil
-    end
-  end
-
   def put_user_session(conn, %{id: id, name: name}) when is_integer(id) and is_binary(name) do
     conn
     |> Plug.Conn.put_session(@site_user_id_key, id)

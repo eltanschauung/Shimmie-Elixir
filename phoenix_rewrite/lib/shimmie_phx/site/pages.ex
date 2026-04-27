@@ -121,65 +121,6 @@ defmodule ShimmiePhoenix.Site.Pages do
     Enum.map(rows, fn [letter] -> letter end)
   end
 
-  def list_comments(page, per_page) do
-    offset = max(page - 1, 0) * per_page
-
-    case sqlite_db_path() do
-      nil ->
-        rows =
-          query_rows(
-            "SELECT c.id, c.image_id, COALESCE(u.name, 'Anonymous') AS owner_name, c.posted, c.comment " <>
-              "FROM comments c LEFT JOIN users u ON u.id = c.owner_id " <>
-              "ORDER BY c.id DESC LIMIT $1 OFFSET $2",
-            [per_page, offset]
-          )
-
-        count =
-          case Repo.query("SELECT COUNT(*) FROM comments") do
-            {:ok, %{rows: [[value]]}} -> value
-            _ -> 0
-          end
-
-        {rows, count}
-
-      path ->
-        sql =
-          "SELECT c.id, c.image_id, COALESCE(u.name, 'Anonymous'), c.posted, c.comment " <>
-            "FROM comments c LEFT JOIN users u ON u.id = c.owner_id " <>
-            "ORDER BY c.id DESC LIMIT #{per_page} OFFSET #{offset}"
-
-        rows = sqlite_rows(path, sql)
-
-        count =
-          case sqlite_single(path, "SELECT COUNT(*) FROM comments") do
-            {:ok, value} -> parse_int(value)
-            _ -> 0
-          end
-
-        {rows, count}
-    end
-  end
-
-  def list_tags(sub, limit \\ 500) do
-    {order_by, where_clause} =
-      case sub do
-        "popularity" -> {"count DESC, tag ASC", "WHERE count > 0"}
-        _ -> {"tag ASC", "WHERE count > 0"}
-      end
-
-    case sqlite_db_path() do
-      nil ->
-        query_rows(
-          "SELECT tag, count FROM tags #{where_clause} ORDER BY #{order_by} LIMIT $1",
-          [limit]
-        )
-
-      path ->
-        sql = "SELECT tag, count FROM tags #{where_clause} ORDER BY #{order_by} LIMIT #{limit}"
-        sqlite_rows(path, sql)
-    end
-  end
-
   def list_blotter(limit \\ 100) do
     case sqlite_db_path() do
       nil ->
@@ -197,7 +138,9 @@ defmodule ShimmiePhoenix.Site.Pages do
   end
 
   def add_blotter_entry(entry_text, important \\ false)
-  def add_blotter_entry(entry_text, important) when is_binary(entry_text) and is_boolean(important) do
+
+  def add_blotter_entry(entry_text, important)
+      when is_binary(entry_text) and is_boolean(important) do
     entry_text = String.trim(entry_text)
 
     cond do
@@ -778,27 +721,6 @@ defmodule ShimmiePhoenix.Site.Pages do
 
   def tag_history_global(_page, _per_page), do: {[], false}
 
-  def list_ip_bans(limit \\ 100) do
-    query_rows_typed(
-      "SELECT b.id, b.ip, b.mode, b.reason, b.added, COALESCE(b.expires, ''), " <>
-        "COALESCE(u.name, 'Anonymous') " <>
-        "FROM bans b LEFT JOIN users u ON u.id = b.banner_id " <>
-        "ORDER BY b.id DESC LIMIT :limit",
-      %{limit: limit}
-    )
-    |> Enum.map(fn [id, ip, mode, reason, added, expires, banner] ->
-      %{
-        id: parse_int(id),
-        ip: ip,
-        mode: mode,
-        reason: reason,
-        added: added,
-        expires: expires,
-        banner: banner
-      }
-    end)
-  end
-
   defp list_comment_thread_ids(limit, offset) do
     rows =
       query_rows_typed(
@@ -1182,7 +1104,8 @@ defmodule ShimmiePhoenix.Site.Pages do
 
       path ->
         with :ok <- ensure_sqlite_blotter_table(path),
-             {:ok, next_id} <- sqlite_single(path, "SELECT COALESCE(MAX(id), 0) + 1 FROM blotter"),
+             {:ok, next_id} <-
+               sqlite_single(path, "SELECT COALESCE(MAX(id), 0) + 1 FROM blotter"),
              :ok <-
                sqlite_exec(
                  path,
@@ -1408,7 +1331,11 @@ defmodule ShimmiePhoenix.Site.Pages do
   end
 
   defp native_extension_row(key, enabled) do
-    details = Map.get(native_extension_catalog(), key, %{name: humanize_extension_key(key), description: ""})
+    details =
+      Map.get(native_extension_catalog(), key, %{
+        name: humanize_extension_key(key),
+        description: ""
+      })
 
     %{
       key: key,

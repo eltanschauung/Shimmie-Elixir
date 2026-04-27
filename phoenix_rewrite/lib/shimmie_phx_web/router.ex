@@ -192,9 +192,4 @@ defmodule ShimmiePhoenixWeb.Router do
       live_dashboard "/dashboard", metrics: ShimmiePhoenixWeb.Telemetry
     end
   end
-
-  scope "/", ShimmiePhoenixWeb do
-    pipe_through :browser
-    get "/*legacy_path", LegacyFallbackController, :show
-  end
 end

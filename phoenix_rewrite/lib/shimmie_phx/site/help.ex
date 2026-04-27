@@ -367,13 +367,6 @@ defmodule ShimmiePhoenix.Site.Help do
   def topics, do: @topics
   def first_topic, do: @topics |> List.first() |> elem(0)
 
-  def topic_name(topic) do
-    case Enum.find(@topics, fn {key, _label} -> key == topic end) do
-      {_key, label} -> label
-      nil -> nil
-    end
-  end
-
   def page(topic, opts \\ [])
 
   def page("search", opts) do

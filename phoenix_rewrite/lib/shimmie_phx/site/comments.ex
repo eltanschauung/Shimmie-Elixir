@@ -31,8 +31,6 @@ defmodule ShimmiePhoenix.Site.Comments do
     actor_id(actor) > 0 and Permissions.allowed?(:comment_ban_ip, actor_class(actor))
   end
 
-  def anonymous_user?(actor), do: anonymous_actor?(actor)
-
   def bypass_comment_checks?(actor) do
     TagEdit.can_edit_tags?(actor)
   end

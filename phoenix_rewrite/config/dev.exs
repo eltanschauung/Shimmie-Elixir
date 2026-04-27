@@ -54,7 +54,6 @@ config :shimmie_phx, ShimmiePhoenixWeb.Endpoint,
   live_reload: [
     patterns: [
       ~r"priv/static/(?!uploads/).*(js|css|png|jpeg|jpg|gif|svg)$",
-      ~r"priv/gettext/.*(po)$",
       ~r"lib/shimmie_phx_web/(controllers|live|components)/.*(ex|heex)$"
     ]
   ]

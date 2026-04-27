@@ -27,7 +27,7 @@
             </td>
             <td style="text-align: left;">
               <b>Date</b>
-              <time datetime={thread.post.posted}>
+              <time datetime={datetime_attr(thread.post.posted)}>
                 <%= format_post_date(thread.post.posted) %>
               </time>
               &nbsp;&nbsp;&nbsp; <b>User</b> <%= thread.post.owner_name %> &nbsp;&nbsp;&nbsp;
@@ -52,7 +52,7 @@
                           }>Ban</a><% end %>)
                       <% end %>
                       <br />
-                      <time datetime={comment.posted}>
+                      <time datetime={datetime_attr(comment.posted)}>
                         <%= format_post_date(comment.posted) %>
                       </time>
                       -

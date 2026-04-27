@@ -105,6 +105,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
       |> html_response(200)
 
     assert admin_body =~ "c_ip=127.0.0.1"
+    assert admin_body =~ ~s(datetime="2026-01-01T01:00:00Z")
     assert admin_body =~ "/comment/delete/1/200"
     assert admin_body =~ "c_ip=127.0.0.1"
 

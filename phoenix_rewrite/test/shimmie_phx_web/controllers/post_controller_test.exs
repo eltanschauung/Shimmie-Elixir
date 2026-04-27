@@ -90,8 +90,10 @@ defmodule ShimmiePhoenixWeb.PostControllerTest do
     conn = get(conn, "/post/view/101")
     body = html_response(conn, 200)
     assert body =~ "Post 101: demo_tag"
-    assert body =~ "/image/101/demo.png"
+    assert body =~ "/image/101/101%20-%20demo_tag.png"
     assert body =~ "640x480"
+    assert body =~ ~s(datetime="2026-01-01T12:00:00Z")
+    assert body =~ ~s(datetime="2026-01-01T13:00:00Z")
     assert body =~ "Favorited By:"
     assert body =~ "alice"
   end

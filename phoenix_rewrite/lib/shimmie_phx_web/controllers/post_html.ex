@@ -1,16 +1,13 @@
 defmodule ShimmiePhoenixWeb.PostHTML do
   use ShimmiePhoenixWeb, :html
 
+  alias ShimmiePhoenixWeb.LegacyTime
   alias ShimmiePhoenix.Site.TextFormat
 
   embed_templates "post_html/*"
 
-  def format_post_date(value) do
-    case NaiveDateTime.from_iso8601(to_string(value || "")) do
-      {:ok, dt} -> Calendar.strftime(dt, "%B %-d, %Y; %H:%M")
-      _ -> to_string(value || "")
-    end
-  end
+  def format_post_date(value), do: LegacyTime.format_post_date(value)
+  def datetime_attr(value), do: LegacyTime.datetime_attr(value)
 
   def human_filesize(value) when is_integer(value) and value >= 1024 * 1024 * 1024 do
     "#{Float.round(value / (1024 * 1024 * 1024), 1)}GB"

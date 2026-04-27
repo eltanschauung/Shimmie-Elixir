@@ -70,7 +70,7 @@
           </a>
         <% end %>)
       <% end %>
-      <br /> Date: <time datetime={@post.posted}><%= format_post_date(@post.posted) %></time>
+      <br /> Date: <time datetime={datetime_attr(@post.posted)}><%= format_post_date(@post.posted) %></time>
       <br />
       Size: <%= human_filesize(@post.filesize) %> (<%= @post.width %>x<%= @post.height %>)<br />
       Type: <%= ShimmiePhoenix.Site.Posts.image_mime(@post) %><br /> Rating: <%= @rating_label %>
@@ -301,7 +301,7 @@
                     "&c_reason=#{URI.encode_www_form("Post posted #{@post.posted}")}" <>
                     "&c_expires=#{URI.encode_www_form("+1 week")}#create"
                 }>Ban</a><% end %>)<% end %>,
-              <time datetime={@post.posted}><%= format_post_date(@post.posted) %></time>
+              <time datetime={datetime_attr(@post.posted)}><%= format_post_date(@post.posted) %></time>
             </td>
             <td width="80px" rowspan="4"></td>
           </tr>
@@ -434,7 +434,7 @@
                   }>Ban</a><% end %>)
               <% end %>
               <br />
-              <time datetime={comment.posted}><%= format_post_date(comment.posted) %></time>
+              <time datetime={datetime_attr(comment.posted)}><%= format_post_date(comment.posted) %></time>
               -
               <a href={"javascript: replyTo(#{@post.id}, #{comment.id}, \"#{comment.owner_name}\")"}>
                 Reply

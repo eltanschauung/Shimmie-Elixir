@@ -529,7 +529,7 @@ defmodule ShimmiePhoenix.Site.Upload do
       name
       |> to_string()
       |> Path.basename()
-      |> String.replace(~r/[^A-Za-z0-9._-]/, "_")
+      |> String.replace(~r/[^A-Za-z0-9._ -]/, "_")
       |> String.trim()
 
     cond do

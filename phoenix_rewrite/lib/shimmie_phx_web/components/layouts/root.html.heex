@@ -48,7 +48,11 @@
       type="text/css"
       href="//ajax.googleapis.com/ajax/libs/jqueryui/1/themes/flick/jquery-ui.css"
     />
-    <link rel="stylesheet" type="text/css" href="/ext/autocomplete/lib/jquery.tagit.css?v=20260303e" />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="/ext/autocomplete/lib/jquery.tagit.css?v=20260303e"
+    />
     <link rel="stylesheet" type="text/css" href="/ext/autocomplete/style.css?v=20260303e" />
     <script defer src="/ext/autocomplete/script.js?v=20260303e" type="text/javascript">
     </script>
@@ -200,9 +204,26 @@
           <div class="sbar">
             <%= for link <- @legacy_chrome.sub_links do %>
               <li>
-                <a class={if link.active?, do: "current-page", else: "tab"} href={link.href}>
-                  <%= link.label %>
-                </a>
+                <%= if Map.get(link, :method, :get) == :post do %>
+                  <form action={link.href} method="POST" style="display:inline;margin:0;">
+                    <input
+                      type="hidden"
+                      name="_csrf_token"
+                      value={Plug.CSRFProtection.get_csrf_token()}
+                    />
+                    <button
+                      type="submit"
+                      class={if link.active?, do: "current-page", else: "tab"}
+                      style="background:none;border:none;padding:0;margin:0;cursor:pointer;font:inherit;"
+                    >
+                      <%= link.label %>
+                    </button>
+                  </form>
+                <% else %>
+                  <a class={if link.active?, do: "current-page", else: "tab"} href={link.href}>
+                    <%= link.label %>
+                  </a>
+                <% end %>
               </li>
             <% end %>
           </div>
@@ -265,8 +286,7 @@
             Contact
           <% end %>
           | <a href="https://github.com/eltanschauung/shimmie-elixir">Shimmie-Elixir</a>
-          <br />
-          Media &copy; their respective owners,
+          <br /> Media &copy; their respective owners,
           <a href="https://code.shishnet.org/shimmie2/">Shimmie</a>
           &copy; <a href="https://www.shishnet.org/">Shish</a>
           &amp; <a href="https://github.com/shish/shimmie2/graphs/contributors">The Team</a>

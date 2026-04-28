@@ -318,7 +318,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
     assert body =~ "/user_config"
     assert body =~ "/post/list/favorited_by=tester/1"
     assert body =~ "/user#private-messages"
-    assert body =~ "/user_admin/logout"
+    assert body =~ ~s(form action="/user_admin/logout" method="POST")
+    assert body =~ ~s(name="_csrf_token")
+    assert body =~ "Log Out"
     refute body =~ ~s(form action="/user_admin/logout" method="GET")
   end
 

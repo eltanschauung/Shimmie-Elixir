@@ -184,7 +184,7 @@ defmodule ShimmiePhoenixWeb.Plugs.LegacyChrome do
           pm_label,
           String.starts_with?(path, "/user") or String.starts_with?(path, "/pm")
         ),
-        nav("/user_admin/logout", "Log Out", false)
+        nav("/user_admin/logout", "Log Out", false, method: :post)
       ]
     else
       []
@@ -253,7 +253,8 @@ defmodule ShimmiePhoenixWeb.Plugs.LegacyChrome do
   defp system_link_active?(path, "/ip_ban/list"), do: String.starts_with?(path, "/ip_ban")
   defp system_link_active?(path, href), do: String.starts_with?(path, href)
 
-  defp nav(href, label, active?) do
+  defp nav(href, label, active?, opts \\ []) do
     %{href: href, label: label, active?: active?}
+    |> Map.merge(Map.new(opts))
   end
 end

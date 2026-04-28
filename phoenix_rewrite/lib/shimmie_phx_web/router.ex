@@ -163,6 +163,7 @@ defmodule ShimmiePhoenixWeb.Router do
     post "/user_admin/change_email", LegacyPagesController, :change_email
     post "/user_admin/change_class", LegacyPagesController, :change_class
     post "/user_admin/delete_user", LegacyPagesController, :delete_user
+    post "/user_admin/logout", LegacyPagesController, :logout
     post "/biography", LegacyPagesController, :biography_save
     post "/pm/delete", LegacyPagesController, :pm_delete
     post "/pm/send", LegacyPagesController, :pm_send

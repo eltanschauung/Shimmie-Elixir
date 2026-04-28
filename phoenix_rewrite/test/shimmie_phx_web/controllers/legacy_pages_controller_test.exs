@@ -296,6 +296,16 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
     assert redirected_to(get(conn, "/user_admin/logout"), 302) == "/post/list"
   end
 
+  test "user admin logout accepts the account form POST", %{conn: conn} do
+    conn =
+      conn
+      |> init_test_session(%{site_user_id: 20, legacy_user_id: 20})
+      |> post("/user_admin/logout")
+
+    assert redirected_to(conn, 302) == "/post/list"
+    assert conn.private.plug_session_info == :drop
+  end
+
   test "account subnavbar shows logged-in account links and no duplicate logout button", %{
     conn: conn
   } do

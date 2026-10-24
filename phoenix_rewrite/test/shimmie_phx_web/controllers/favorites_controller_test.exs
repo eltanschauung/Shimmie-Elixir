@@ -41,7 +41,7 @@ defmodule ShimmiePhoenixWeb.FavoritesControllerTest do
   end
 
   test "POST /favourite/add/:id adds favorite and redirects", %{conn: conn} do
-    conn = post(conn, "/favourite/add/301", %{"user_id" => "2"})
+    conn = conn |> init_test_session(%{site_user_id: 2}) |> post("/favourite/add/301", %{})
     assert redirected_to(conn) == "/post/view/301"
 
     assert Repo.query!("SELECT COUNT(*) FROM user_favorites WHERE image_id = 301 AND user_id = 2").rows ==
@@ -68,7 +68,7 @@ defmodule ShimmiePhoenixWeb.FavoritesControllerTest do
       "UPDATE images SET favorites = (SELECT COUNT(*) FROM user_favorites WHERE image_id = 301) WHERE id = 301"
     )
 
-    conn = post(conn, "/favourite/remove/301", %{"user_id" => "2"})
+    conn = conn |> init_test_session(%{site_user_id: 2}) |> post("/favourite/remove/301", %{})
     assert redirected_to(conn) == "/post/view/301"
 
     assert Repo.query!("SELECT COUNT(*) FROM user_favorites WHERE image_id = 301 AND user_id = 2").rows ==
@@ -78,14 +78,46 @@ defmodule ShimmiePhoenixWeb.FavoritesControllerTest do
   end
 
   test "POST /favourite/add/:id returns 404 for missing post", %{conn: conn} do
-    conn = post(conn, "/favourite/add/999999", %{"user_id" => "2"})
+    conn = conn |> init_test_session(%{site_user_id: 2}) |> post("/favourite/add/999999", %{})
     assert response(conn, 404)
   end
 
   test "favorite writes reject nonexistent accounts without creating orphan rows" do
     assert ShimmiePhoenix.Site.Favorites.user_exists?(2)
     refute ShimmiePhoenix.Site.Favorites.user_exists?(999_999)
-    assert {:error, :user_not_found} = ShimmiePhoenix.Site.Favorites.set(301, 999_999, true)
+
+    assert {:error, :user_not_found} =
+             ShimmiePhoenix.Site.Favorites.set(301, %{id: 999_999, class: "user"}, true)
+
     assert Repo.query!("SELECT COUNT(*) FROM user_favorites WHERE user_id = 999999").rows == [[0]]
+  end
+
+  test "favorites derive account identity from authentication and hide inaccessible targets", %{
+    conn: conn
+  } do
+    Repo.query!("INSERT INTO users(id,name,class) VALUES(3,'other','user')")
+    assert response(post(conn, "/favourite/add/301", %{"user_id" => "2"}), 403)
+
+    denied =
+      conn
+      |> init_test_session(%{site_user_id: 2})
+      |> post("/favourite/add/301", %{"user_id" => "3"})
+
+    assert response(denied, 403)
+    assert Repo.query!("SELECT COUNT(*) FROM user_favorites").rows == [[0]]
+
+    Repo.query!(
+      "ALTER TABLE images ADD COLUMN IF NOT EXISTS approved BOOLEAN NOT NULL DEFAULT TRUE"
+    )
+
+    Repo.query!("INSERT INTO config(name,value) VALUES('approve_images','1')")
+    Repo.query!("UPDATE images SET approved=FALSE,owner_id=3 WHERE id=301")
+    hidden = conn |> init_test_session(%{site_user_id: 2}) |> post("/favourite/add/301", %{})
+    assert response(hidden, 404)
+
+    for class <- ["anonymous", "banned", "ghost"] do
+      assert {:error, :permission_denied} =
+               ShimmiePhoenix.Site.Favorites.set(301, %{id: 2, class: class}, true)
+    end
   end
 end

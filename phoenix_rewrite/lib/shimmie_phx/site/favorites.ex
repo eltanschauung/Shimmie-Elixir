@@ -4,18 +4,10 @@ defmodule ShimmiePhoenix.Site.Favorites do
   """
 
   alias ShimmiePhoenix.Site
-  alias ShimmiePhoenix.Site.Posts
-  alias ShimmiePhoenix.Site.Store
+  alias ShimmiePhoenix.Site.PostPolicy
   alias ShimmiePhoenix.Repo
 
   @sqlite_separator <<31>>
-
-  def default_user_id do
-    case Integer.parse(Store.get_config("anon_id", "1") |> to_string()) do
-      {id, ""} when id > 0 -> id
-      _ -> 1
-    end
-  end
 
   def user_exists?(user_id) when is_integer(user_id) and user_id > 0 do
     case sqlite_db_path() do
@@ -34,20 +26,25 @@ defmodule ShimmiePhoenix.Site.Favorites do
 
   def user_exists?(_), do: false
 
-  def set(image_id, user_id, do_set)
+  def set(image_id, %{id: user_id} = actor, do_set)
       when is_integer(image_id) and image_id > 0 and is_integer(user_id) and user_id > 0 and
              is_boolean(do_set) do
     cond do
-      is_nil(Posts.get_post(image_id)) ->
-        {:error, :post_not_found}
+      not PostPolicy.active_account?(actor) ->
+        {:error, :permission_denied}
 
       not user_exists?(user_id) ->
         {:error, :user_not_found}
 
       true ->
         case sqlite_db_path() do
-          nil -> set_repo(image_id, user_id, do_set)
-          path -> set_sqlite(path, image_id, user_id, do_set)
+          nil ->
+            set_repo(image_id, actor, do_set)
+
+          path ->
+            with {:ok, _post} <- PostPolicy.writable_post(image_id, actor) do
+              set_sqlite(path, image_id, user_id, do_set)
+            end
         end
     end
   end
@@ -83,25 +80,36 @@ defmodule ShimmiePhoenix.Site.Favorites do
 
   def list_favorited_by(_), do: []
 
-  defp set_repo(image_id, user_id, do_set) do
-    if do_set do
+  defp set_repo(image_id, actor, do_set) do
+    Repo.transaction(fn ->
+      Repo.query!("SELECT id FROM images WHERE id = $1 FOR UPDATE", [image_id])
+
+      case PostPolicy.writable_post(image_id, actor) do
+        {:ok, _} -> :ok
+        {:error, reason} -> Repo.rollback(reason)
+      end
+
+      user_id = actor.id
+
+      if do_set do
+        Repo.query!(
+          "INSERT INTO user_favorites(image_id, user_id, created_at) VALUES ($1, $2, NOW()) ON CONFLICT (image_id, user_id) DO NOTHING",
+          [image_id, user_id]
+        )
+      else
+        Repo.query!("DELETE FROM user_favorites WHERE image_id = $1 AND user_id = $2", [
+          image_id,
+          user_id
+        ])
+      end
+
       Repo.query!(
-        "INSERT INTO user_favorites(image_id, user_id, created_at) VALUES ($1, $2, NOW()) ON CONFLICT (image_id, user_id) DO NOTHING",
-        [image_id, user_id]
+        "UPDATE images SET favorites = (SELECT COUNT(*) FROM user_favorites WHERE image_id = $1) WHERE id = $1",
+        [image_id]
       )
-    else
-      Repo.query!("DELETE FROM user_favorites WHERE image_id = $1 AND user_id = $2", [
-        image_id,
-        user_id
-      ])
-    end
 
-    Repo.query!(
-      "UPDATE images SET favorites = (SELECT COUNT(*) FROM user_favorites WHERE image_id = $1) WHERE id = $1",
-      [image_id]
-    )
-
-    {:ok, count_for_image_repo(image_id)}
+      count_for_image_repo(image_id)
+    end)
   rescue
     _ -> {:error, :db_error}
   end
@@ -121,14 +129,14 @@ defmodule ShimmiePhoenix.Site.Favorites do
         "DELETE FROM user_favorites WHERE image_id = #{image_id} AND user_id = #{user_id}"
       end
 
-    with :ok <- sqlite_exec(path, command_sql),
-         :ok <-
-           sqlite_exec(
-             path,
-             "UPDATE images SET favorites = (SELECT COUNT(*) FROM user_favorites WHERE image_id = #{image_id}) WHERE id = #{image_id}"
-           ),
-         {:ok, count} <-
-           sqlite_int(path, "SELECT favorites FROM images WHERE id = #{image_id} LIMIT 1") do
+    sql =
+      "BEGIN IMMEDIATE; " <>
+        command_sql <>
+        "; " <>
+        "UPDATE images SET favorites = (SELECT COUNT(*) FROM user_favorites WHERE image_id = #{image_id}) WHERE id = #{image_id}; " <>
+        "SELECT favorites FROM images WHERE id = #{image_id} LIMIT 1; COMMIT;"
+
+    with {:ok, count} <- sqlite_int(path, sql) do
       {:ok, count}
     else
       _ -> {:error, :db_error}
@@ -155,15 +163,6 @@ defmodule ShimmiePhoenix.Site.Favorites do
       {:ok, count}
     else
       _ -> {:error, :invalid_int}
-    end
-  end
-
-  defp sqlite_exec(path, query) do
-    args = [path, query]
-
-    case System.cmd("sqlite3", args, stderr_to_stdout: true) do
-      {_output, 0} -> :ok
-      _ -> {:error, :sqlite_failed}
     end
   end
 

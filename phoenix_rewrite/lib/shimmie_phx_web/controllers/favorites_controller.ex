@@ -3,16 +3,25 @@ defmodule ShimmiePhoenixWeb.FavoritesController do
 
   alias ShimmiePhoenix.Site.Favorites
   alias ShimmiePhoenix.Site.Users
+  alias ShimmiePhoenix.Site.PostPolicy
 
   def add(conn, %{"image_id" => image_id} = params), do: set(conn, image_id, params, true)
   def remove(conn, %{"image_id" => image_id} = params), do: set(conn, image_id, params, false)
 
   defp set(conn, image_id, params, do_set) do
     with {post_id, ""} <- Integer.parse(image_id),
-         user_id <- actor_user_id(conn, params),
-         {:ok, _count} <- Favorites.set(post_id, user_id, do_set) do
+         actor <- Users.current_user(conn),
+         true <- PostPolicy.active_account?(actor),
+         true <- params["user_id"] in [nil, to_string(actor.id)],
+         {:ok, _count} <- Favorites.set(post_id, actor, do_set) do
       redirect(conn, to: "/post/view/#{post_id}")
     else
+      false ->
+        send_resp(conn, 403, "Permission Denied")
+
+      {:error, :permission_denied} ->
+        send_resp(conn, 403, "Permission Denied")
+
       {:error, :post_not_found} ->
         send_resp(conn, 404, "Not Found")
 
@@ -24,22 +33,6 @@ defmodule ShimmiePhoenixWeb.FavoritesController do
 
       _ ->
         send_resp(conn, 400, "Bad Request")
-    end
-  end
-
-  defp actor_user_id(conn, params) do
-    cond do
-      is_binary(params["user_id"]) ->
-        case Integer.parse(params["user_id"]) do
-          {id, ""} when id > 0 -> id
-          _ -> Favorites.default_user_id()
-        end
-
-      true ->
-        case Users.session_user_id(conn) do
-          id when is_integer(id) and id > 0 -> id
-          _ -> Favorites.default_user_id()
-        end
     end
   end
 end

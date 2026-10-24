@@ -28,7 +28,10 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     per_page = 10
     current_user = conn.assigns[:legacy_user] || Users.current_user(conn)
     {threads, total_count} = Pages.list_comment_threads(page, per_page, current_user)
-    conn = if current_user, do: put_resp_header(conn, "cache-control", "private, no-store"), else: conn
+
+    conn =
+      if current_user, do: put_resp_header(conn, "cache-control", "private, no-store"), else: conn
+
     total_pages = max(1, div(total_count + per_page - 1, per_page))
     current_page = min(page, total_pages)
     remote_ip = Users.remote_ip_string(conn)
@@ -36,7 +39,8 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     comment_captcha? = String.upcase(to_string(Store.get_config("comment_captcha", "N"))) == "Y"
 
     show_inline_postbox? =
-      can_create_comments and (Comments.bypass_comment_checks?(current_user) or not comment_captcha?)
+      can_create_comments and
+        (Comments.bypass_comment_checks?(current_user) or not comment_captcha?)
 
     conn
     |> assign(:page_title, "#{Pages.site_title()} - Comments")
@@ -243,7 +247,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
           )
 
         _ ->
-          redirect(conn, to: "/auto_tag/list?error=" <> URI.encode_www_form("Unable to save rule"))
+          redirect(conn,
+            to: "/auto_tag/list?error=" <> URI.encode_www_form("Unable to save rule")
+          )
       end
     else
       send_resp(conn, 403, "Permission Denied")
@@ -325,7 +331,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
           redirect(conn, to: "/alias/list?notice=" <> URI.encode_www_form("Alias removed"))
 
         _ ->
-          redirect(conn, to: "/alias/list?error=" <> URI.encode_www_form("Unable to remove alias"))
+          redirect(conn,
+            to: "/alias/list?error=" <> URI.encode_www_form("Unable to remove alias")
+          )
       end
     else
       send_resp(conn, 403, "Permission Denied")
@@ -1055,10 +1063,16 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
         |> redirect(to: login_redirect_target(conn))
 
       {:error, :throttled} ->
-        conn |> put_resp_header("retry-after", "60") |> send_resp(429, "Too many attempts. Try again later.")
+        conn
+        |> put_resp_header("retry-after", "60")
+        |> send_resp(429, "Too many attempts. Try again later.")
 
       {:error, :password_upgrade_required} ->
-        send_resp(conn, 403, "This legacy password requires an administrator-assisted password reset.")
+        send_resp(
+          conn,
+          403,
+          "This legacy password requires an administrator-assisted password reset."
+        )
 
       {:error, :invalid_credentials} ->
         redirect(conn,
@@ -1120,7 +1134,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     if actor && actor.class == "admin" do
       case Users.create_user(params, Users.remote_ip_string(conn), %{login: false}) do
         {:ok, _user, _} ->
-          redirect(conn, to: "/user_admin/list?notice=" <> URI.encode_www_form("Created new user"))
+          redirect(conn,
+            to: "/user_admin/list?notice=" <> URI.encode_www_form("Created new user")
+          )
 
         {:error, reason} ->
           redirect(conn,
@@ -1156,7 +1172,10 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
         next_path:
           if(list.page < list.total_pages, do: user_list_path(params, list.page + 1), else: nil),
         last_path:
-          if(list.page < list.total_pages, do: user_list_path(params, list.total_pages), else: nil),
+          if(list.page < list.total_pages,
+            do: user_list_path(params, list.total_pages),
+            else: nil
+          ),
         page_links: page_links,
         notice: params["notice"],
         error: params["error"]
@@ -1196,7 +1215,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
         |> redirect(to: "/user_admin/list?notice=" <> URI.encode_www_form("Username changed"))
 
       {:error, reason} ->
-        redirect(conn, to: "/user_admin/list?error=" <> URI.encode_www_form(error_message(reason)))
+        redirect(conn,
+          to: "/user_admin/list?error=" <> URI.encode_www_form(error_message(reason))
+        )
     end
   end
 
@@ -1228,7 +1249,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
         redirect(conn, to: "/user_admin/list?notice=" <> URI.encode_www_form("Email changed"))
 
       {:error, reason} ->
-        redirect(conn, to: "/user_admin/list?error=" <> URI.encode_www_form(error_message(reason)))
+        redirect(conn,
+          to: "/user_admin/list?error=" <> URI.encode_www_form(error_message(reason))
+        )
     end
   end
 
@@ -1241,7 +1264,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
         redirect(conn, to: "/user_admin/list?notice=" <> URI.encode_www_form("Class changed"))
 
       {:error, reason} ->
-        redirect(conn, to: "/user_admin/list?error=" <> URI.encode_www_form(error_message(reason)))
+        redirect(conn,
+          to: "/user_admin/list?error=" <> URI.encode_www_form(error_message(reason))
+        )
     end
   end
 
@@ -1254,7 +1279,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
         redirect(conn, to: "/user_admin/list?notice=" <> URI.encode_www_form("User deleted"))
 
       {:error, reason} ->
-        redirect(conn, to: "/user_admin/list?error=" <> URI.encode_www_form(error_message(reason)))
+        redirect(conn,
+          to: "/user_admin/list?error=" <> URI.encode_www_form(error_message(reason))
+        )
     end
   end
 
@@ -1651,24 +1678,25 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     file_entries =
       params
       |> Enum.flat_map(fn
-      {"data" <> row, uploads} when is_list(uploads) ->
-        parsed_row = parse_row_number(row)
+        {"data" <> row, uploads} when is_list(uploads) ->
+          parsed_row = parse_row_number(row)
 
-        uploads
-        |> Enum.with_index()
-        |> Enum.flat_map(fn
-          {%Plug.Upload{} = upload, order} ->
-            [%{kind: :file, row: parsed_row, order: order, upload: upload}]
+          uploads
+          |> Enum.with_index()
+          |> Enum.flat_map(fn
+            {%Plug.Upload{} = upload, order} ->
+              [%{kind: :file, row: parsed_row, order: order, upload: upload}]
 
-          _ -> []
-        end)
+            _ ->
+              []
+          end)
 
-      {"data" <> row, %Plug.Upload{} = upload} ->
-        [%{kind: :file, row: parse_row_number(row), order: 0, upload: upload}]
+        {"data" <> row, %Plug.Upload{} = upload} ->
+          [%{kind: :file, row: parse_row_number(row), order: 0, upload: upload}]
 
-      _ ->
-        []
-    end)
+        _ ->
+          []
+      end)
 
     url_entries =
       params
@@ -1711,7 +1739,10 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     do: "One or more files use a blocked or unsupported file type"
 
   defp upload_error_message(:invalid_upload), do: "Invalid upload payload"
-  defp upload_error_message(:invalid_source), do: "Source must be a valid HTTP(S) URL or plain text"
+
+  defp upload_error_message(:invalid_source),
+    do: "Source must be a valid HTTP(S) URL or plain text"
+
   defp upload_error_message(:invalid_url), do: "One or more URL uploads were invalid"
   defp upload_error_message(:transload_disabled), do: "URL uploads are disabled in board settings"
   defp upload_error_message(:transload_failed), do: "One or more URL uploads could not be fetched"
@@ -3142,7 +3173,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
 
   defp ensure_target_user_id(params, actor) when is_map(params) do
     cond do
-      Map.get(params, "id") in [nil, ""] and actor && actor.id ->
+      (Map.get(params, "id") in [nil, ""] and actor) && actor.id ->
         Map.put(params, "id", actor.id)
 
       true ->
@@ -3177,7 +3208,10 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
   defp error_message(:invalid_username), do: "Invalid username"
   defp error_message(:username_taken), do: "That username is already taken"
   defp error_message(:password_mismatch), do: "Passwords do not match"
-  defp error_message(:invalid_password), do: "Password must be at least 12 characters and at most 72 bytes"
+
+  defp error_message(:invalid_password),
+    do: "Password must be at least 12 characters and at most 72 bytes"
+
   defp error_message(:throttled), do: "Too many attempts. Try again later."
   defp error_message(:email_required), do: "Email address is required"
   defp error_message(:invalid_email), do: "Invalid email address"

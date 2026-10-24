@@ -30,6 +30,14 @@ defmodule ShimmiePhoenix.AuthSecurityTest do
   end
 
   test "public signup never replaces explicit administrator bootstrap" do
-    assert {:ok, %{class: "user"}, _} = Users.create_user(%{"name" => "ordinary", "pass1" => "strong-test-password", "pass2" => "strong-test-password"}, "192.0.2.1")
+    assert {:ok, %{class: "user"}, _} =
+             Users.create_user(
+               %{
+                 "name" => "ordinary",
+                 "pass1" => "strong-test-password",
+                 "pass2" => "strong-test-password"
+               },
+               "192.0.2.1"
+             )
   end
 end

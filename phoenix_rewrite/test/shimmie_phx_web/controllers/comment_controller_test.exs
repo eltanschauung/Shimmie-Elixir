@@ -50,7 +50,7 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
   test "POST /comment/add creates comment for logged-in user", %{conn: conn} do
     conn =
       conn
-      |> init_test_session(%{site_user_id: 2})
+      |> sign_in(2)
       |> post("/comment/add", %{
         "image_id" => "101",
         "comment" => "test comment",
@@ -98,7 +98,7 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
 
     conn =
       conn
-      |> init_test_session(%{site_user_id: 2})
+      |> sign_in(2)
       |> post("/comment/add", %{
         "image_id" => "101",
         "comment" => "not allowed",
@@ -138,7 +138,7 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
   test "POST /comment/add rejects empty comment", %{conn: conn} do
     conn =
       conn
-      |> init_test_session(%{site_user_id: 2})
+      |> sign_in(2)
       |> post("/comment/add", %{"image_id" => "101", "comment" => " \n\t"})
 
     assert redirected_to(conn) ==
@@ -169,7 +169,7 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
 
     conn =
       conn
-      |> init_test_session(%{site_user_id: 3})
+      |> sign_in(3)
       |> put_private(:plug_skip_csrf_protection, false)
       |> get("/comment/delete/501/999")
 
@@ -198,7 +198,7 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
 
     conn =
       conn
-      |> init_test_session(%{site_user_id: 4})
+      |> sign_in(4)
       |> post("/comment/delete/502/101")
 
     assert redirected_to(conn) == "/post/view/101"
@@ -214,14 +214,14 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
 
     conn =
       conn
-      |> init_test_session(%{site_user_id: 2})
+      |> sign_in(2)
       |> get("/comment/delete/503/101")
 
     assert response(conn, 403) =~ "Permission Denied"
     assert Repo.query!("SELECT COUNT(*) FROM comments WHERE id = 503").rows == [[1]]
 
     conn =
-      build_conn() |> init_test_session(%{site_user_id: 2}) |> post("/comment/delete/503/101")
+      build_conn() |> sign_in(2) |> post("/comment/delete/503/101")
 
     assert response(conn, 403) == "Permission Denied"
     assert Repo.query!("SELECT COUNT(*) FROM comments WHERE id = 503").rows == [[1]]
@@ -235,7 +235,7 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
     for params <- [%{}, %{"_csrf_token" => "invalid"}] do
       assert_raise Plug.CSRFProtection.InvalidCSRFTokenError, fn ->
         conn
-        |> init_test_session(%{site_user_id: 3})
+        |> sign_in(3)
         |> put_private(:plug_skip_csrf_protection, false)
         |> post("/comment/delete/504/101", params)
       end
@@ -245,7 +245,7 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
   end
 
   test "confirmation rejects invalid and missing comments", %{conn: conn} do
-    conn = init_test_session(conn, %{site_user_id: 3})
+    conn = sign_in(conn, 3)
     assert response(get(conn, "/comment/delete/not-an-id/101"), 400) == "Bad Request"
     assert response(get(conn, "/comment/delete/999/101"), 404) == "Not Found"
   end

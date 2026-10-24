@@ -98,7 +98,7 @@ defmodule ShimmiePhoenixWeb.PostAdminControllerTest do
     for route <- ["/note/add_note", "/note/add_request", "/note/edit_note"] do
       result =
         conn
-        |> init_test_session(%{site_user_id: 2})
+        |> sign_in(2)
         |> post(route, Map.merge(attrs, %{"image_id" => "501", "note_id" => "1"}))
 
       assert response(result, 404) == "Not Found"
@@ -111,7 +111,7 @@ defmodule ShimmiePhoenixWeb.PostAdminControllerTest do
   end
 
   test "admin post/view includes full post controls parity block", %{conn: conn} do
-    conn = conn |> init_test_session(%{site_user_id: 1}) |> get("/post/view/501")
+    conn = conn |> sign_in(1) |> get("/post/view/501")
     body = html_response(conn, 200)
 
     assert body =~ "Feature This"
@@ -125,7 +125,7 @@ defmodule ShimmiePhoenixWeb.PostAdminControllerTest do
   end
 
   test "non-admin post/view hides admin-only controls", %{conn: conn} do
-    conn = conn |> init_test_session(%{site_user_id: 2}) |> get("/post/view/501")
+    conn = conn |> sign_in(2) |> get("/post/view/501")
     body = html_response(conn, 200)
 
     refute body =~ "Feature This"
@@ -139,7 +139,7 @@ defmodule ShimmiePhoenixWeb.PostAdminControllerTest do
   test "POST /featured_image/set updates featured_id for admins", %{conn: conn} do
     conn =
       conn
-      |> init_test_session(%{site_user_id: 1})
+      |> sign_in(1)
       |> post("/featured_image/set", %{"image_id" => "501"})
 
     assert redirected_to(conn) == "/post/view/501"
@@ -149,7 +149,7 @@ defmodule ShimmiePhoenixWeb.PostAdminControllerTest do
   test "POST /image/delete deletes image for admins", %{conn: conn} do
     conn =
       conn
-      |> init_test_session(%{site_user_id: 1})
+      |> sign_in(1)
       |> post("/image/delete", %{"image_id" => "501"})
 
     assert redirected_to(conn) == "/post/list"
@@ -159,7 +159,7 @@ defmodule ShimmiePhoenixWeb.PostAdminControllerTest do
   test "POST /note/nuke_requests returns 403 for non-admins", %{conn: conn} do
     conn =
       conn
-      |> init_test_session(%{site_user_id: 2})
+      |> sign_in(2)
       |> post("/note/nuke_requests", %{"image_id" => "501"})
 
     assert response(conn, 403) =~ "Permission Denied"

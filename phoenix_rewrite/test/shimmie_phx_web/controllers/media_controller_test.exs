@@ -117,7 +117,7 @@ defmodule ShimmiePhoenixWeb.MediaControllerTest do
   } do
     hash = private_post!(root)
     assert response(get(conn, "/thumb/203/#{hash}"), 404) == "Not Found"
-    conn = conn |> init_test_session(%{site_user_id: 77}) |> get("/thumb/203/#{hash}")
+    conn = conn |> sign_in(77) |> get("/thumb/203/#{hash}")
     assert response(conn, 200) == "PRIVATE-THUMB"
     assert get_resp_header(conn, "cache-control") == ["private, no-store"]
   end
@@ -128,7 +128,7 @@ defmodule ShimmiePhoenixWeb.MediaControllerTest do
     for warehouse <- ["images", "thumbs"] do
       path = "/data/#{warehouse}/cd/#{hash}"
       assert response(get(conn, path), 404) == "Not Found"
-      owner_conn = conn |> init_test_session(%{site_user_id: 77}) |> get(path)
+      owner_conn = conn |> sign_in(77) |> get(path)
       expected = if warehouse == "images", do: "PRIVATE-IMAGE", else: "PRIVATE-THUMB"
       assert response(owner_conn, 200) == expected
       assert get_resp_header(owner_conn, "cache-control") == ["private, no-store"]
@@ -175,7 +175,7 @@ defmodule ShimmiePhoenixWeb.MediaControllerTest do
 
     conn =
       conn
-      |> init_test_session(%{site_user_id: 77, site_user_name: "owner"})
+      |> sign_in(77)
       |> get("/image/202/sample.png")
 
     assert response(conn, 200) == "PNGDATA"

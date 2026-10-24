@@ -32,10 +32,10 @@ defmodule ShimmiePhoenixWeb.APIVisibilityTest do
     for selector <- ["id=901", "md5=" <> String.duplicate("a", 32)] do
       url = "/api/danbooru/find_posts/index.json?" <> selector
       assert json_response(get(conn, url), 200) == []
-      assert json_response(conn |> init_test_session(%{site_user_id: 3}) |> get(url), 200) == []
+      assert json_response(conn |> sign_in(3) |> get(url), 200) == []
 
       for id <- [2, 4] do
-        result = conn |> init_test_session(%{site_user_id: id}) |> get(url)
+        result = conn |> sign_in(id) |> get(url)
         assert [%{"id" => 901}] = json_response(result, 200)
         assert get_resp_header(result, "cache-control") == ["private, no-store"]
       end
@@ -44,7 +44,7 @@ defmodule ShimmiePhoenixWeb.APIVisibilityTest do
         result = get(conn, route <> selector)
         assert response(result, 200) =~ "count=\"0\""
         refute response(result, 200) =~ "pending.png"
-        owner = conn |> init_test_session(%{site_user_id: 2}) |> get(route <> selector)
+        owner = conn |> sign_in(2) |> get(route <> selector)
         assert response(owner, 200) =~ "id=\"901\""
       end
     end

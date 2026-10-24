@@ -35,4 +35,14 @@ defmodule ShimmiePhoenixWeb.ConnCase do
     ShimmiePhoenix.DataCase.setup_sandbox(tags)
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
+
+  @doc "Issues production credential-bound session proof for a synthetic fixture account."
+  def sign_in(conn, id) do
+    user = ShimmiePhoenix.Site.Users.get_user_by_id(id)
+    if is_nil(user), do: raise("Create the synthetic account before signing in")
+
+    conn
+    |> Plug.Test.init_test_session(%{})
+    |> ShimmiePhoenix.Site.Users.put_user_session(user)
+  end
 end

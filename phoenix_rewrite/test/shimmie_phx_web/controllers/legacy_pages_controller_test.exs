@@ -100,7 +100,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
   test "comment list shows moderation controls for admin only", %{conn: conn} do
     admin_body =
       conn
-      |> init_test_session(%{site_user_id: 30})
+      |> sign_in(30)
       |> get("/comment/list")
       |> html_response(200)
 
@@ -110,7 +110,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
 
     user_body =
       conn
-      |> init_test_session(%{site_user_id: 20})
+      |> sign_in(20)
       |> get("/comment/list")
       |> html_response(200)
 
@@ -122,9 +122,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
   test "admin can create and delete IP bans from /ip_ban routes", %{conn: conn} do
     create_conn =
       conn
-      |> init_test_session(%{site_user_id: 30})
+      |> sign_in(30)
       |> post("/ip_ban/create", %{
-        "c_ip" => "74.91.116.171",
+        "c_ip" => "192.0.2.44",
         "c_mode" => "block",
         "c_reason" => "test ban",
         "c_expires" => "+1 week"
@@ -134,16 +134,16 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
 
     [[ban_id, ip, mode, reason]] =
       Repo.query!(
-        "SELECT id, ip, mode, reason FROM bans WHERE ip = '74.91.116.171' ORDER BY id DESC LIMIT 1"
+        "SELECT id, ip, mode, reason FROM bans WHERE ip = '192.0.2.44' ORDER BY id DESC LIMIT 1"
       ).rows
 
-    assert ip == "74.91.116.171"
+    assert ip == "192.0.2.44"
     assert mode == "block"
     assert reason == "test ban"
 
     delete_conn =
       conn
-      |> init_test_session(%{site_user_id: 30})
+      |> sign_in(30)
       |> post("/ip_ban/delete", %{"d_id" => to_string(ban_id)})
 
     assert redirected_to(delete_conn, 302) =~ "/ip_ban/list?notice="
@@ -168,7 +168,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
 
     page_1_html =
       conn
-      |> init_test_session(%{site_user_id: 30})
+      |> sign_in(30)
       |> get("/ip_ban/list?r_all=on&r__size=2&r__page=1")
       |> html_response(200)
 
@@ -179,7 +179,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
 
     page_2_html =
       conn
-      |> init_test_session(%{site_user_id: 30})
+      |> sign_in(30)
       |> get("/ip_ban/list?r_all=on&r__size=2&r__page=2")
       |> html_response(200)
 
@@ -227,7 +227,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
   test "comment list renders inline comment postbox for admin", %{conn: conn} do
     body =
       conn
-      |> init_test_session(%{site_user_id: 30})
+      |> sign_in(30)
       |> get("/comment/list")
       |> html_response(200)
 
@@ -262,14 +262,14 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
     assert total == 1
     {[last_thread], 1} = ShimmiePhoenix.Site.Pages.list_comment_threads(999, 1)
     assert last_thread.post.id == 200
-    owner = conn |> init_test_session(%{site_user_id: 20}) |> get("/comment/list")
+    owner = conn |> sign_in(20) |> get("/comment/list")
     assert html_response(owner, 200) =~ "private-comment-marker"
     assert get_resp_header(owner, "cache-control") == ["private, no-store"]
 
     {[_thread], 2} =
       ShimmiePhoenix.Site.Pages.list_comment_threads(1, 1, %{id: 20, class: "user"})
 
-    admin = conn |> init_test_session(%{site_user_id: 30}) |> get("/comment/list")
+    admin = conn |> sign_in(30) |> get("/comment/list")
     assert html_response(admin, 200) =~ "private-comment-marker"
   end
 
@@ -311,7 +311,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
       File.rm_rf!(root)
     end)
 
-    conn = init_test_session(conn, %{site_user_id: 30})
+    conn = sign_in(conn, 30)
 
     assert redirected_to(get(conn, "/system"), 302) == "/setup"
     assert html_response(get(conn, "/setup"), 200) =~ "Board Config"
@@ -348,7 +348,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
   } do
     body =
       conn
-      |> init_test_session(%{site_user_id: 20})
+      |> sign_in(20)
       |> get("/user")
       |> html_response(200)
 
@@ -362,7 +362,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
   test "/user_config route resolves to the account page for logged in user", %{conn: conn} do
     body =
       conn
-      |> init_test_session(%{site_user_id: 20})
+      |> sign_in(20)
       |> get("/user_config")
       |> html_response(200)
 
@@ -373,7 +373,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
   test "self password change redirects back to account page", %{conn: conn} do
     conn =
       conn
-      |> init_test_session(%{site_user_id: 20})
+      |> sign_in(20)
       |> post("/user_admin/change_pass", %{
         "user_id" => "20",
         "pass1" => "new_secret",

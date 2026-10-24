@@ -154,13 +154,13 @@ defmodule ShimmiePhoenixWeb.PostControllerTest do
     Repo.query!("UPDATE images SET approved = FALSE WHERE id = 101")
     Repo.query!("INSERT INTO users(id, name, class) VALUES (5, 'unrelated', 'user')")
     assert response(get(conn, "/post/view/101"), 404) == "Not Found"
-    other = conn |> init_test_session(%{site_user_id: 5}) |> get("/post/view/101")
+    other = conn |> sign_in(5) |> get("/post/view/101")
     assert response(other, 404) == "Not Found"
   end
 
   test "owner can view unapproved post details without shared caching", %{conn: conn} do
     Repo.query!("UPDATE images SET approved = FALSE WHERE id = 101")
-    conn = conn |> init_test_session(%{site_user_id: 2}) |> get("/post/view/101")
+    conn = conn |> sign_in(2) |> get("/post/view/101")
     assert html_response(conn, 200) =~ "demo_tag"
     assert get_resp_header(conn, "cache-control") == ["private, no-store"]
   end
@@ -170,7 +170,7 @@ defmodule ShimmiePhoenixWeb.PostControllerTest do
 
     conn =
       conn
-      |> init_test_session(%{site_user_id: 2})
+      |> sign_in(2)
       |> post("/note/add_note", %{
         "image_id" => "101",
         "note_x1" => "0",
@@ -197,21 +197,21 @@ defmodule ShimmiePhoenixWeb.PostControllerTest do
   test "GET /post/view/:id shows Approve control for admins on pending posts", %{conn: conn} do
     Repo.query!("UPDATE images SET approved = FALSE WHERE id = 101")
 
-    conn = conn |> init_test_session(%{site_user_id: 1}) |> get("/post/view/101")
+    conn = conn |> sign_in(1) |> get("/post/view/101")
     body = html_response(conn, 200)
     assert body =~ "/approve_image/101"
     assert body =~ "Approve"
   end
 
   test "GET /post/view/:id shows Disapprove control for admins on approved posts", %{conn: conn} do
-    conn = conn |> init_test_session(%{site_user_id: 1}) |> get("/post/view/102")
+    conn = conn |> sign_in(1) |> get("/post/view/102")
     body = html_response(conn, 200)
     assert body =~ "/disapprove_image/102"
     assert body =~ "Disapprove"
   end
 
   test "GET /post/view/:id shows comment IP and delete control for admin", %{conn: conn} do
-    conn = conn |> init_test_session(%{site_user_id: 1}) |> get("/post/view/101")
+    conn = conn |> sign_in(1) |> get("/post/view/101")
     body = html_response(conn, 200)
     assert body =~ "Uploader:"
     assert body =~ "198.51.100.42"
@@ -229,7 +229,7 @@ defmodule ShimmiePhoenixWeb.PostControllerTest do
   end
 
   test "GET /post/view/:id shows comment delete but not IP for Tag-Dono", %{conn: conn} do
-    conn = conn |> init_test_session(%{site_user_id: 3}) |> get("/post/view/101")
+    conn = conn |> sign_in(3) |> get("/post/view/101")
     body = html_response(conn, 200)
     refute body =~ "(198.51.100.42,"
     refute body =~ "c_reason=Post+posted"
@@ -243,7 +243,7 @@ defmodule ShimmiePhoenixWeb.PostControllerTest do
 
     conn =
       conn
-      |> init_test_session(%{site_user_id: 1})
+      |> sign_in(1)
       |> post("/approve_image/101", %{"image_id" => "101"})
 
     assert redirected_to(conn) == "/post/view/101"
@@ -258,7 +258,7 @@ defmodule ShimmiePhoenixWeb.PostControllerTest do
   test "POST /disapprove_image/:id disapproves approved posts for admins", %{conn: conn} do
     conn =
       conn
-      |> init_test_session(%{site_user_id: 1})
+      |> sign_in(1)
       |> post("/disapprove_image/102", %{"image_id" => "102"})
 
     assert redirected_to(conn) == "/post/view/102"
@@ -278,7 +278,7 @@ defmodule ShimmiePhoenixWeb.PostControllerTest do
   test "GET /post/view/:id shows Approve control for Tag-Dono on pending posts", %{conn: conn} do
     Repo.query!("UPDATE images SET approved = FALSE WHERE id = 101")
 
-    conn = conn |> init_test_session(%{site_user_id: 3}) |> get("/post/view/101")
+    conn = conn |> sign_in(3) |> get("/post/view/101")
     body = html_response(conn, 200)
     assert body =~ "/approve_image/101"
     assert body =~ "Approve"
@@ -289,7 +289,7 @@ defmodule ShimmiePhoenixWeb.PostControllerTest do
 
     conn =
       conn
-      |> init_test_session(%{site_user_id: 3})
+      |> sign_in(3)
       |> post("/approve_image/101", %{"image_id" => "101"})
 
     assert redirected_to(conn) == "/post/view/101"
@@ -304,7 +304,7 @@ defmodule ShimmiePhoenixWeb.PostControllerTest do
   test "GET /post/list/approved=no/1 shows pending posts for Tag-Dono", %{conn: conn} do
     Repo.query!("UPDATE images SET approved = FALSE WHERE id = 101")
 
-    conn = conn |> init_test_session(%{site_user_id: 3}) |> get("/post/list/approved=no/1")
+    conn = conn |> sign_in(3) |> get("/post/list/approved=no/1")
     assert redirected_to(conn, 302) == "/post/view/101"
   end
 

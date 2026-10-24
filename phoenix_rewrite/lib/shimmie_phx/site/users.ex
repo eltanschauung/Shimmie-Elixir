@@ -17,6 +17,10 @@ defmodule ShimmiePhoenix.Site.Users do
   @site_user_name_key :site_user_name
   @legacy_user_id_key :legacy_user_id
   @legacy_user_name_key :legacy_user_name
+  @session_proof_key :site_session_proof_v2
+  @session_salt "account-session-v2"
+  @legacy_salt "legacy-session-v2"
+  alias ShimmiePhoenixWeb.Endpoint
 
   def signup_enabled?, do: config_bool("login_signup_enabled", true)
   def user_email_required?, do: config_bool("user_email_required", false)
@@ -33,9 +37,12 @@ defmodule ShimmiePhoenix.Site.Users do
   def anonymous_id, do: config_int("anon_id", 1)
 
   def current_user(conn) do
-    case session_user_id(conn) do
+    case raw_session_user_id(conn) do
       id when is_integer(id) and id > 0 ->
-        user_by_id(id)
+        user = user_by_id(id)
+
+        if valid_proof?(user, Plug.Conn.get_session(conn, @session_proof_key), @session_salt),
+          do: user
 
       _ ->
         conn = Plug.Conn.fetch_cookies(conn)
@@ -48,7 +55,7 @@ defmodule ShimmiePhoenix.Site.Users do
               nil
 
             user ->
-              if valid_session?(user, token, remote_ip_string(conn.remote_ip)),
+              if valid_session?(user, token, remote_ip_string(conn)),
                 do: user,
                 else: nil
           end
@@ -59,6 +66,13 @@ defmodule ShimmiePhoenix.Site.Users do
   end
 
   def session_user_id(conn) do
+    case current_user(conn) do
+      %{id: id} -> id
+      _ -> nil
+    end
+  end
+
+  defp raw_session_user_id(conn) do
     case Plug.Conn.get_session(conn, @site_user_id_key) ||
            Plug.Conn.get_session(conn, @legacy_user_id_key) do
       id when is_integer(id) and id > 0 -> id
@@ -67,17 +81,20 @@ defmodule ShimmiePhoenix.Site.Users do
   end
 
   def session_user_name(conn) do
-    case Plug.Conn.get_session(conn, @site_user_name_key) ||
-           Plug.Conn.get_session(conn, @legacy_user_name_key) do
-      name when is_binary(name) and name != "" -> name
+    case current_user(conn) do
+      %{name: name} -> name
       _ -> nil
     end
   end
 
-  def put_user_session(conn, %{id: id, name: name}) when is_integer(id) and is_binary(name) do
+  def put_user_session(conn, %{id: id, name: name} = user)
+      when is_integer(id) and is_binary(name) do
+    proof = Phoenix.Token.sign(Endpoint, @session_salt, proof_payload(user))
+
     conn
     |> Plug.Conn.put_session(@site_user_id_key, id)
     |> Plug.Conn.put_session(@legacy_user_id_key, id)
+    |> Plug.Conn.put_session(@session_proof_key, proof)
     |> put_user_name_session(name)
   end
 
@@ -114,7 +131,7 @@ defmodule ShimmiePhoenix.Site.Users do
         if valid_password?(user, pass) do
           Logger.info("auth.login success backend=#{backend}")
 
-          {:ok, user, session_id(user.passhash, remote_ip)}
+          {:ok, user, session_id(user, remote_ip)}
         else
           Logger.warning("auth.login failure backend=#{backend}")
 
@@ -191,7 +208,7 @@ defmodule ShimmiePhoenix.Site.Users do
               {:error, :create_failed}
 
             login? ->
-              {:ok, user, session_id(user.passhash, remote_ip)}
+              {:ok, user, session_id(user, remote_ip)}
 
             true ->
               {:ok, user, nil}
@@ -390,7 +407,7 @@ defmodule ShimmiePhoenix.Site.Users do
          {:ok, _} <-
            update_user_password(user.id, Bcrypt.hash_pwd_salt(Map.get(params, "pass1", ""))) do
       refreshed = user_by_id(user.id)
-      {:ok, refreshed, session_id(refreshed.passhash, remote_ip)}
+      {:ok, refreshed, session_id(refreshed, remote_ip)}
     else
       {:error, _} = err -> err
       nil -> {:error, :user_not_found}
@@ -472,10 +489,39 @@ defmodule ShimmiePhoenix.Site.Users do
     end
   end
 
-  def session_id(passhash, remote_ip) when is_binary(remote_ip) do
-    hash = (passhash || "") <> masked_session_ip(remote_ip) <> Site.secret()
-    :crypto.hash(:sha3_256, hash) |> Base.encode16(case: :lower)
+  def session_id(%{id: id} = user, remote_ip) when is_integer(id) and is_binary(remote_ip) do
+    payload = Map.put(proof_payload(user), :subnet, masked_session_ip(remote_ip))
+    "v2." <> Phoenix.Token.sign(Endpoint, @legacy_salt, payload)
   end
+
+  defp proof_payload(user) do
+    %{id: user.id, credential: credential_stamp(Map.get(user, :passhash))}
+  end
+
+  defp credential_stamp(passhash) do
+    :crypto.mac(
+      :hmac,
+      :sha256,
+      Endpoint.config(:secret_key_base),
+      "account-credential-v2:" <> to_string(passhash || "")
+    )
+    |> Base.url_encode64(padding: false)
+  end
+
+  defp session_max_age, do: max(60, min(max(login_memory_days(), 0), 365) * 86_400)
+
+  defp valid_proof?(%{id: id} = user, token, salt)
+       when is_binary(token) and byte_size(token) < 4_096 do
+    with {:ok, %{id: ^id, credential: credential}} <-
+           Phoenix.Token.verify(Endpoint, salt, token, max_age: session_max_age()),
+         true <- is_binary(credential) do
+      Plug.Crypto.secure_compare(credential, credential_stamp(Map.get(user, :passhash)))
+    else
+      _ -> false
+    end
+  end
+
+  defp valid_proof?(_, _, _), do: false
 
   def remote_ip_string(%Plug.Conn{} = conn) do
     proxy_tuple = normalize_ipv4_mapped_ipv6(conn.remote_ip)
@@ -1146,9 +1192,17 @@ defmodule ShimmiePhoenix.Site.Users do
   defp normalize_bcrypt_hash("$2y$" <> rest), do: "$2b$" <> rest
   defp normalize_bcrypt_hash(value), do: value
 
-  defp valid_session?(%{passhash: passhash}, token, remote_ip) do
-    token == session_id(passhash, remote_ip)
+  defp valid_session?(user, "v2." <> token, remote_ip) do
+    with true <- valid_proof?(user, token, @legacy_salt),
+         {:ok, %{subnet: subnet}} <-
+           Phoenix.Token.verify(Endpoint, @legacy_salt, token, max_age: session_max_age()) do
+      subnet == masked_session_ip(remote_ip)
+    else
+      _ -> false
+    end
   end
+
+  defp valid_session?(_, _, _), do: false
 
   defp masked_session_ip(remote_ip) do
     case {parse_ip(remote_ip), parse_ip(session_hash_mask())} do

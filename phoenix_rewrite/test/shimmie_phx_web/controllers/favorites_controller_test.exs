@@ -41,7 +41,7 @@ defmodule ShimmiePhoenixWeb.FavoritesControllerTest do
   end
 
   test "POST /favourite/add/:id adds favorite and redirects", %{conn: conn} do
-    conn = conn |> init_test_session(%{site_user_id: 2}) |> post("/favourite/add/301", %{})
+    conn = conn |> sign_in(2) |> post("/favourite/add/301", %{})
     assert redirected_to(conn) == "/post/view/301"
 
     assert Repo.query!("SELECT COUNT(*) FROM user_favorites WHERE image_id = 301 AND user_id = 2").rows ==
@@ -68,7 +68,7 @@ defmodule ShimmiePhoenixWeb.FavoritesControllerTest do
       "UPDATE images SET favorites = (SELECT COUNT(*) FROM user_favorites WHERE image_id = 301) WHERE id = 301"
     )
 
-    conn = conn |> init_test_session(%{site_user_id: 2}) |> post("/favourite/remove/301", %{})
+    conn = conn |> sign_in(2) |> post("/favourite/remove/301", %{})
     assert redirected_to(conn) == "/post/view/301"
 
     assert Repo.query!("SELECT COUNT(*) FROM user_favorites WHERE image_id = 301 AND user_id = 2").rows ==
@@ -78,7 +78,7 @@ defmodule ShimmiePhoenixWeb.FavoritesControllerTest do
   end
 
   test "POST /favourite/add/:id returns 404 for missing post", %{conn: conn} do
-    conn = conn |> init_test_session(%{site_user_id: 2}) |> post("/favourite/add/999999", %{})
+    conn = conn |> sign_in(2) |> post("/favourite/add/999999", %{})
     assert response(conn, 404)
   end
 
@@ -100,7 +100,7 @@ defmodule ShimmiePhoenixWeb.FavoritesControllerTest do
 
     denied =
       conn
-      |> init_test_session(%{site_user_id: 2})
+      |> sign_in(2)
       |> post("/favourite/add/301", %{"user_id" => "3"})
 
     assert response(denied, 403)
@@ -112,7 +112,7 @@ defmodule ShimmiePhoenixWeb.FavoritesControllerTest do
 
     Repo.query!("INSERT INTO config(name,value) VALUES('approve_images','1')")
     Repo.query!("UPDATE images SET approved=FALSE,owner_id=3 WHERE id=301")
-    hidden = conn |> init_test_session(%{site_user_id: 2}) |> post("/favourite/add/301", %{})
+    hidden = conn |> sign_in(2) |> post("/favourite/add/301", %{})
     assert response(hidden, 404)
 
     for class <- ["anonymous", "banned", "ghost"] do

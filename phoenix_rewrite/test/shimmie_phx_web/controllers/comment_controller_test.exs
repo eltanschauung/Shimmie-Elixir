@@ -51,7 +51,11 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
     conn =
       conn
       |> init_test_session(%{site_user_id: 2})
-      |> post("/comment/add", %{"image_id" => "101", "comment" => "test comment"})
+      |> post("/comment/add", %{
+        "image_id" => "101",
+        "comment" => "test comment",
+        "hash" => Comments.form_hash("127.0.0.1")
+      })
 
     assert redirected_to(conn) == "/post/view/101#comment_on_101"
 
@@ -82,7 +86,10 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
       |> init_test_session(%{site_user_id: 2})
       |> post("/comment/add", %{"image_id" => "101", "comment" => " \n\t"})
 
-    assert response(conn, 403) =~ "Comments need text..."
+    assert redirected_to(conn) ==
+             "/post/view/101?error=#{URI.encode_www_form("Comments need text...")}#comment_on_101"
+
+    assert Repo.query!("SELECT COUNT(*) FROM comments").rows == [[0]]
   end
 
   test "POST /comment/add rejects anonymous request with invalid hash", %{conn: conn} do
@@ -93,7 +100,10 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
         "hash" => "bad-hash"
       })
 
-    assert response(conn, 403) =~ "Comment submission form is out of date"
+    assert redirected_to(conn) ==
+             "/post/view/101?error=#{URI.encode_www_form("Comment submission form is out of date; refresh and try again~")}#comment_on_101"
+
+    assert Repo.query!("SELECT COUNT(*) FROM comments").rows == [[0]]
   end
 
   test "GET /comment/delete/:comment_id/:image_id deletes comment for admin", %{conn: conn} do

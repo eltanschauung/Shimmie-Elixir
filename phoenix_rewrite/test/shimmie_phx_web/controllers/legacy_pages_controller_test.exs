@@ -263,6 +263,25 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
   end
 
   test "system section switches to admin routes for logged in admin", %{conn: conn} do
+    root =
+      Path.join(System.tmp_dir!(), "shimmie_extensions_#{System.unique_integer([:positive])}")
+
+    config_dir = Path.join([root, "data", "config"])
+    File.mkdir_p!(config_dir)
+
+    File.write!(
+      Path.join(config_dir, "extensions.conf.php"),
+      "<?php $extensions = ['ipban', 'source_history', 'tag_history'];"
+    )
+
+    previous_root = Application.get_env(:shimmie_phx, :legacy_root)
+    Application.put_env(:shimmie_phx, :legacy_root, root)
+
+    on_exit(fn ->
+      Application.put_env(:shimmie_phx, :legacy_root, previous_root)
+      File.rm_rf!(root)
+    end)
+
     conn = init_test_session(conn, %{site_user_id: 30})
 
     assert redirected_to(get(conn, "/system"), 302) == "/setup"

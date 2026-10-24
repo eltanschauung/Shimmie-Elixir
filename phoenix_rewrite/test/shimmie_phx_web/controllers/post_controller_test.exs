@@ -28,7 +28,7 @@ defmodule ShimmiePhoenixWeb.PostControllerTest do
       [
         101,
         2,
-        "74.91.116.171",
+        "198.51.100.42",
         "demo.png",
         12345,
         hash,
@@ -48,7 +48,7 @@ defmodule ShimmiePhoenixWeb.PostControllerTest do
       [
         102,
         2,
-        "74.91.116.171",
+        "198.51.100.42",
         "other.jpg",
         5678,
         hash2,
@@ -90,7 +90,7 @@ defmodule ShimmiePhoenixWeb.PostControllerTest do
     conn = get(conn, "/post/view/101")
     body = html_response(conn, 200)
     assert body =~ "Post 101: demo_tag"
-    assert body =~ "/image/101/demo.png"
+    assert body =~ "/image/101/101%20-%20demo_tag.png"
     assert body =~ "640x480"
     assert body =~ "Favorited By:"
     assert body =~ "alice"
@@ -123,8 +123,8 @@ defmodule ShimmiePhoenixWeb.PostControllerTest do
     conn = conn |> init_test_session(%{site_user_id: 1}) |> get("/post/view/101")
     body = html_response(conn, 200)
     assert body =~ "Uploader:"
-    assert body =~ "74.91.116.171"
-    assert body =~ "c_ip=74.91.116.171"
+    assert body =~ "198.51.100.42"
+    assert body =~ "c_ip=198.51.100.42"
     assert body =~ "c_reason=Post+posted"
     assert body =~ "/comment/delete/901/101"
     assert body =~ "c_ip=127.0.0.1"
@@ -140,7 +140,7 @@ defmodule ShimmiePhoenixWeb.PostControllerTest do
   test "GET /post/view/:id shows comment delete but not IP for Tag-Dono", %{conn: conn} do
     conn = conn |> init_test_session(%{site_user_id: 3}) |> get("/post/view/101")
     body = html_response(conn, 200)
-    refute body =~ "(74.91.116.171,"
+    refute body =~ "(198.51.100.42,"
     refute body =~ "c_reason=Post+posted"
     refute body =~ "IP: 127.0.0.1"
     assert body =~ "/comment/delete/901/101"

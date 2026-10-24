@@ -2,7 +2,8 @@ defmodule ShimmiePhoenixWeb.LegacyAssetController do
   use ShimmiePhoenixWeb, :controller
 
   alias ShimmiePhoenix.Site
-  @allowed_data_roots MapSet.new(["images", "thumbs", "cache"])
+  alias ShimmiePhoenixWeb.MediaController
+  @allowed_data_roots MapSet.new(["cache"])
 
   @blocked_extensions MapSet.new([
                         ".php",
@@ -25,6 +26,12 @@ defmodule ShimmiePhoenixWeb.LegacyAssetController do
                         ".yml",
                         ".yaml"
                       ])
+
+  def data(conn, %{"path" => ["images", _prefix, hash]}),
+    do: MediaController.legacy_image(conn, %{"hash" => hash})
+
+  def data(conn, %{"path" => ["thumbs", _prefix, hash]}),
+    do: MediaController.legacy_thumb(conn, %{"hash" => hash})
 
   def data(conn, %{"path" => path_parts}), do: serve(conn, ["data" | path_parts])
   def ext(conn, %{"path" => path_parts}), do: serve(conn, ["ext" | path_parts])

@@ -54,7 +54,7 @@ defmodule ShimmiePhoenixWeb.MediaControllerTest do
       File.rm_rf(root)
     end)
 
-    :ok
+    %{legacy_root: root}
   end
 
   test "GET /image/:id/:filename serves original media", %{conn: conn} do
@@ -78,6 +78,63 @@ defmodule ShimmiePhoenixWeb.MediaControllerTest do
     conn = get(conn, "/thumb/202/thumb")
     assert response(conn, 200) == "THUMBDATA"
     assert get_resp_header(conn, "content-type") |> List.first() =~ "image/jpeg"
+  end
+
+  test "thumbnail filename cannot select another post's unapproved file", %{
+    conn: conn,
+    legacy_root: root
+  } do
+    hash = private_post!(root)
+    conn = get(conn, "/thumb/202/#{hash}.jpg")
+    assert response(conn, 200) == "THUMBDATA"
+  end
+
+  test "private thumbnail is hidden from guests but available to its owner", %{
+    conn: conn,
+    legacy_root: root
+  } do
+    hash = private_post!(root)
+    assert response(get(conn, "/thumb/203/#{hash}"), 404) == "Not Found"
+    conn = conn |> init_test_session(%{site_user_id: 77}) |> get("/thumb/203/#{hash}")
+    assert response(conn, 200) == "PRIVATE-THUMB"
+    assert get_resp_header(conn, "cache-control") == ["private, no-store"]
+  end
+
+  test "legacy data routes enforce the same media visibility", %{conn: conn, legacy_root: root} do
+    hash = private_post!(root)
+
+    for warehouse <- ["images", "thumbs"] do
+      path = "/data/#{warehouse}/cd/#{hash}"
+      assert response(get(conn, path), 404) == "Not Found"
+      owner_conn = conn |> init_test_session(%{site_user_id: 77}) |> get(path)
+      expected = if warehouse == "images", do: "PRIVATE-IMAGE", else: "PRIVATE-THUMB"
+      assert response(owner_conn, 200) == expected
+      assert get_resp_header(owner_conn, "cache-control") == ["private, no-store"]
+    end
+
+    assert response(get(conn, "/data/images/ab/abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), 200) ==
+             "PNGDATA"
+
+    assert response(get(conn, "/data/thumbs/ab/abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), 200) ==
+             "THUMBDATA"
+  end
+
+  defp private_post!(root) do
+    hash = "cdcccccccccccccccccccccccccccccc"
+    Repo.query!("INSERT INTO users(id, name, class) VALUES (77, 'owner', 'user')")
+
+    Repo.query!(
+      "INSERT INTO images(id, owner_id, filename, filesize, width, height, hash, ext, approved) VALUES (203, 77, 'private.png', 13, 1, 1, $1, 'png', FALSE)",
+      [hash]
+    )
+
+    for {warehouse, contents} <- [{"images", "PRIVATE-IMAGE"}, {"thumbs", "PRIVATE-THUMB"}] do
+      dir = Path.join([root, "data", warehouse, "cd"])
+      File.mkdir_p!(dir)
+      File.write!(Path.join(dir, hash), contents)
+    end
+
+    hash
   end
 
   test "GET /image/:id/:filename hides unapproved media from anonymous users", %{conn: conn} do

@@ -15,12 +15,14 @@ defmodule ShimmiePhoenixWeb.PostController do
   alias ShimmiePhoenix.Site.Users
 
   def view(conn, %{"image_id" => image_id}) do
+    current_user = conn.assigns[:legacy_user] || Users.current_user(conn)
+
     case normalize_image_id(image_id) do
       {:redirect, id, search_term} ->
         redirect(conn, to: "/post/view/#{id}#search=#{URI.encode_www_form(search_term)}")
 
       {:ok, id} ->
-        case Posts.get_post(id) do
+        case visible_post(id, current_user) do
           nil ->
             send_resp(conn, 404, "Not Found")
 
@@ -30,9 +32,9 @@ defmodule ShimmiePhoenixWeb.PostController do
             owner_name = Posts.owner_name(id)
             tag_rows = Posts.tag_rows(id)
             comments = Posts.comments(id)
-            current_user = conn.assigns[:legacy_user] || Users.current_user(conn)
             remote_ip = Users.remote_ip_string(conn)
             recaptcha_key = to_string(Store.get_config("api_recaptcha_pubkey", "") || "")
+
             comment_captcha_enabled? =
               String.upcase(to_string(Store.get_config("comment_captcha", "N"))) == "Y"
 
@@ -42,8 +44,12 @@ defmodule ShimmiePhoenixWeb.PostController do
             show_approval_controls =
               Approval.can_approve?(current_user) and Approval.approval_supported?()
 
-            post_approved =
-              if(show_approval_controls, do: Approval.image_approved?(id), else: true)
+            post_approved = Approval.image_approved?(id)
+
+            conn =
+              if post_approved,
+                do: conn,
+                else: put_resp_header(conn, "cache-control", "private, no-store")
 
             notes_json =
               id
@@ -117,6 +123,10 @@ defmodule ShimmiePhoenixWeb.PostController do
       :error ->
         send_resp(conn, 404, "Not Found")
     end
+  end
+
+  defp visible_post(id, actor) do
+    if Approval.can_view_image?(id, actor), do: Posts.get_post(id)
   end
 
   defp normalize_comment_placeholder(nil), do: "Add your comment"
@@ -478,5 +488,4 @@ defmodule ShimmiePhoenixWeb.PostController do
       _ -> {:error, :invalid_image_id}
     end
   end
-
 end

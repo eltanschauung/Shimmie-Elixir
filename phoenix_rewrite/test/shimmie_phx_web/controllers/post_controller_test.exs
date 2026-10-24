@@ -96,6 +96,21 @@ defmodule ShimmiePhoenixWeb.PostControllerTest do
     assert body =~ "alice"
   end
 
+  test "post details hide unapproved posts from guests and unrelated users", %{conn: conn} do
+    Repo.query!("UPDATE images SET approved = FALSE WHERE id = 101")
+    Repo.query!("INSERT INTO users(id, name, class) VALUES (5, 'unrelated', 'user')")
+    assert response(get(conn, "/post/view/101"), 404) == "Not Found"
+    other = conn |> init_test_session(%{site_user_id: 5}) |> get("/post/view/101")
+    assert response(other, 404) == "Not Found"
+  end
+
+  test "owner can view unapproved post details without shared caching", %{conn: conn} do
+    Repo.query!("UPDATE images SET approved = FALSE WHERE id = 101")
+    conn = conn |> init_test_session(%{site_user_id: 2}) |> get("/post/view/101")
+    assert html_response(conn, 200) =~ "demo_tag"
+    assert get_resp_header(conn, "cache-control") == ["private, no-store"]
+  end
+
   test "GET /post/view/:id hides approval controls for non-admins", %{conn: conn} do
     conn = get(conn, "/post/view/101")
     body = html_response(conn, 200)

@@ -5,88 +5,58 @@ defmodule ShimmiePhoenixWeb.MediaController do
   alias ShimmiePhoenix.Site.Posts
   alias ShimmiePhoenix.Site.Users
 
-  def image(conn, %{"image_id" => image_id}) do
-    conn = Plug.Conn.fetch_session(conn)
+  def image(conn, params), do: serve_post(conn, params, :image)
+  def legacy_image(conn, params), do: image(conn, params)
+  def thumb(conn, params), do: serve_post(conn, params, :thumb)
+  def legacy_thumb(conn, params), do: thumb(conn, params)
+
+  defp serve_post(conn, params, kind) do
+    conn = fetch_session(conn)
     actor = conn.assigns[:legacy_user] || Users.current_user(conn)
 
-    with {id, ""} <- Integer.parse(image_id),
-         true <- Approval.can_view_image?(id, actor),
-         post when not is_nil(post) <- Posts.get_post(id),
-         path <- Posts.media_path(post),
-         true <- regular_non_symlink_file?(path) do
-      filename = safe_header_filename(Posts.download_filename(post))
-
-      conn
-      |> put_resp_content_type(Posts.image_mime(post))
-      |> put_resp_header("content-disposition", ~s(inline; filename="#{filename}"))
-      |> send_file(200, path)
-    else
-      _ -> send_resp(conn, 404, "Not Found")
-    end
-  end
-
-  def legacy_image(conn, %{"hash" => hash}) do
-    conn = Plug.Conn.fetch_session(conn)
-    actor = conn.assigns[:legacy_user] || Users.current_user(conn)
-
-    with post when is_map(post) <- Posts.get_post_by_hash(hash),
+    # The display filename must never select a different file from the post
+    # whose visibility was authorized.
+    with post when is_map(post) <- requested_post(params),
          true <- Approval.can_view_image?(post.id, actor),
-         path <- Posts.media_path(post),
+         {path, mime} <- media_file(post, kind),
          true <- regular_non_symlink_file?(path) do
+      conn
+      |> media_headers(post, kind)
+      |> put_resp_content_type(mime)
+      |> send_file(200, path)
+    else
+      _ -> send_resp(conn, 404, "Not Found")
+    end
+  end
+
+  defp requested_post(%{"image_id" => image_id}) do
+    case Integer.parse(image_id) do
+      {id, ""} -> Posts.get_post(id)
+      _ -> nil
+    end
+  end
+
+  defp requested_post(%{"hash" => hash}), do: Posts.get_post_by_hash(hash)
+  defp requested_post(_), do: nil
+
+  defp media_file(post, :image), do: {Posts.media_path(post), Posts.image_mime(post)}
+  defp media_file(post, :thumb), do: {Posts.thumb_path(post), Posts.thumb_mime()}
+
+  defp media_headers(conn, post, kind) do
+    conn =
+      if Approval.image_approved?(post.id) do
+        if kind == :thumb,
+          do: put_resp_header(conn, "cache-control", "public, max-age=31536000, immutable"),
+          else: conn
+      else
+        put_resp_header(conn, "cache-control", "private, no-store")
+      end
+
+    if kind == :image do
       filename = safe_header_filename(Posts.download_filename(post))
-
-      conn
-      |> put_resp_content_type(Posts.image_mime(post))
-      |> put_resp_header("content-disposition", ~s(inline; filename="#{filename}"))
-      |> send_file(200, path)
+      put_resp_header(conn, "content-disposition", ~s(inline; filename="#{filename}"))
     else
-      _ -> send_resp(conn, 404, "Not Found")
-    end
-  end
-
-  def thumb(conn, %{"image_id" => image_id, "filename" => filename}) do
-    conn = Plug.Conn.fetch_session(conn)
-    actor = conn.assigns[:legacy_user] || Users.current_user(conn)
-
-    with {id, ""} <- Integer.parse(image_id),
-         true <- Approval.can_view_image?(id, actor),
-         path when is_binary(path) <- thumb_path(id, filename),
-         true <- regular_non_symlink_file?(path) do
       conn
-      |> put_resp_header("cache-control", "public, max-age=31536000, immutable")
-      |> put_resp_content_type(Posts.thumb_mime())
-      |> send_file(200, path)
-    else
-      _ -> send_resp(conn, 404, "Not Found")
-    end
-  end
-
-  defp thumb_path(id, filename) do
-    hash_guess =
-      filename
-      |> to_string()
-      |> String.split(".", parts: 2)
-      |> List.first()
-      |> to_string()
-      |> String.downcase()
-
-    case Posts.thumb_path_from_hash(hash_guess) do
-      path when is_binary(path) ->
-        if File.exists?(path) do
-          path
-        else
-          thumb_path_from_db(id)
-        end
-
-      _ ->
-        thumb_path_from_db(id)
-    end
-  end
-
-  defp thumb_path_from_db(id) do
-    case Posts.get_post(id) do
-      nil -> nil
-      post -> Posts.thumb_path(post)
     end
   end
 

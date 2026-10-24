@@ -102,30 +102,21 @@ defmodule ShimmiePhoenix.Site.Users do
 
   def login(name, pass, remote_ip) when is_binary(name) and is_binary(pass) do
     backend = active_backend()
-    trimmed_name = String.trim(name)
-
-    Logger.info("auth.login attempt user=#{trimmed_name} backend=#{backend}")
 
     case user_by_name(String.trim(name)) ||
            user_by_name(String.replace(String.trim(name), " ", "_")) do
       nil ->
-        Logger.warning(
-          "auth.login failure user=#{trimmed_name} backend=#{backend} reason=user_not_found"
-        )
+        Logger.warning("auth.login failure backend=#{backend}")
 
         {:error, :invalid_credentials}
 
       user ->
         if valid_password?(user, pass) do
-          Logger.info(
-            "auth.login success user=#{user.name} class=#{user.class} backend=#{backend}"
-          )
+          Logger.info("auth.login success backend=#{backend}")
 
           {:ok, user, session_id(user.passhash, remote_ip)}
         else
-          Logger.warning(
-            "auth.login failure user=#{trimmed_name} backend=#{backend} reason=bad_password"
-          )
+          Logger.warning("auth.login failure backend=#{backend}")
 
           {:error, :invalid_credentials}
         end

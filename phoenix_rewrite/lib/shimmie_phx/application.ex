@@ -9,6 +9,7 @@ defmodule ShimmiePhoenix.Application do
   def start(_type, _args) do
     children = [
       ShimmiePhoenix.Cache,
+      {Task.Supervisor, name: ShimmiePhoenix.NotificationSupervisor, max_children: 16},
       ShimmiePhoenixWeb.Telemetry,
       ShimmiePhoenix.Repo,
       {DNSCluster, query: Application.get_env(:shimmie_phx, :dns_cluster_query) || :ignore},

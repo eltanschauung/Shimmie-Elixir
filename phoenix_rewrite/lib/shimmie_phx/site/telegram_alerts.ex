@@ -74,12 +74,26 @@ defmodule ShimmiePhoenix.Site.TelegramAlerts do
           |> Enum.reject(&is_nil_or_blank?/1)
           |> Enum.join("\n")
 
-        spawn(fn -> _ = send_message(token, chat_id, message) end)
+        enqueue(fn -> send_message(token, chat_id, message) end)
         :ok
 
       _ ->
         :ok
     end
+  end
+
+  defp enqueue(fun) do
+    case Task.Supervisor.start_child(ShimmiePhoenix.NotificationSupervisor, fun) do
+      {:ok, _pid} -> :ok
+      {:error, _reason} -> dropped_notification()
+    end
+  catch
+    :exit, _reason -> dropped_notification()
+  end
+
+  defp dropped_notification do
+    :telemetry.execute([:shimmie_phx, :notification, :dropped], %{count: 1}, %{})
+    :ok
   end
 
   defp send_message(token, chat_id, message) do
@@ -160,13 +174,6 @@ defmodule ShimmiePhoenix.Site.TelegramAlerts do
     case Jason.decode(to_string(body || "")) do
       {:ok, %{"ok" => true}} ->
         :ok
-
-      {:ok, %{"description" => description}} ->
-        Logger.warning(
-          "telegram_alerts.send rejected description=#{String.slice(to_string(description), 0, 120)}"
-        )
-
-        :error
 
       {:ok, _payload} ->
         Logger.warning("telegram_alerts.send rejected")

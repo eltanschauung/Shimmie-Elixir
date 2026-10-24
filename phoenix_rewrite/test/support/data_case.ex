@@ -43,6 +43,22 @@ defmodule ShimmiePhoenix.DataCase do
 
     pid = Ecto.Adapters.SQL.Sandbox.start_owner!(ShimmiePhoenix.Repo, shared: not tags[:async])
     on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
+
+    unless tags[:async] do
+      # Legacy fixtures insert explicit IDs below this ceiling. PostgreSQL
+      # sequences do not roll back with sandbox transactions: reserve a disjoint
+      # range once, only moving forward, so repeated/randomized runs cannot collide.
+      ShimmiePhoenix.Repo.query!(
+        "SELECT quote_ident(schemaname)||'.'||quote_ident(sequencename), COALESCE(last_value,start_value) FROM pg_sequences WHERE schemaname=current_schema()"
+      )
+      |> Map.fetch!(:rows)
+      |> Enum.each(fn [sequence, last] ->
+        ShimmiePhoenix.Repo.query!("SELECT setval($1::text::regclass,$2,true)", [
+          sequence,
+          max(last, 1_000_000)
+        ])
+      end)
+    end
   end
 
   @doc """

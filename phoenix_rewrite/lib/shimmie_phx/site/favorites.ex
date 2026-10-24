@@ -176,7 +176,16 @@ defmodule ShimmiePhoenix.Site.Favorites do
   end
 
   defp sqlite_lines(path, query) do
-    args = ["-noheader", "-separator", @sqlite_separator, path, query]
+    args = [
+      "-bail",
+      "-cmd",
+      ".timeout 5000",
+      "-noheader",
+      "-separator",
+      @sqlite_separator,
+      path,
+      query
+    ]
 
     case System.cmd("sqlite3", args, stderr_to_stdout: true) do
       {output, 0} ->

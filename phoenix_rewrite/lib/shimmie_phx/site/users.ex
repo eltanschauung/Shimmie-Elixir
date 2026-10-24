@@ -459,6 +459,10 @@ defmodule ShimmiePhoenix.Site.Users do
   end
 
   def delete_user(actor, params) do
+    ShimmiePhoenix.Mutation.atomic(fn -> do_delete_user(actor, params) end)
+  end
+
+  defp do_delete_user(actor, params) do
     with :ok <- ensure_admin(actor),
          {:ok, user_id} <- parse_user_id(params["id"]),
          user when not is_nil(user) <- user_by_id(user_id),
@@ -467,22 +471,18 @@ defmodule ShimmiePhoenix.Site.Users do
       with_comments = truthy?(Map.get(params, "with_comments"))
       anon = anonymous_id()
 
-      if with_images do
-        _ = delete_user_images(user.id)
+      image_action =
+        if with_images, do: &delete_user_images/1, else: &reassign_user_images(&1, anon)
+
+      comment_action =
+        if with_comments, do: &delete_user_comments/1, else: &reassign_user_comments(&1, anon)
+
+      with {:ok, _} <- image_action.(user.id),
+           {:ok, _} <- comment_action.(user.id),
+           {:ok, _} <- delete_user_favorites(user.id),
+           {:ok, _} <- delete_user_row(user.id) do
+        {:ok, :deleted}
       else
-        _ = reassign_user_images(user.id, anon)
-      end
-
-      if with_comments do
-        _ = delete_user_comments(user.id)
-      else
-        _ = reassign_user_comments(user.id, anon)
-      end
-
-      _ = delete_user_favorites(user.id)
-
-      case delete_user_row(user.id) do
-        {:ok, _} -> {:ok, :deleted}
         _ -> {:error, :delete_failed}
       end
     else
@@ -1060,13 +1060,9 @@ defmodule ShimmiePhoenix.Site.Users do
   end
 
   defp sqlite_exec(sql) do
-    case System.cmd("sqlite3", [sqlite_db_path!(), sql], stderr_to_stdout: true) do
-      {_, 0} ->
-        {:ok, :done}
-
-      {error, _} ->
-        Logger.warning("auth.sqlite exec failed: #{String.trim(error)}")
-        {:error, :sqlite_failed}
+    case ShimmiePhoenix.Mutation.sqlite_exec(sqlite_db_path!(), sql) do
+      :ok -> {:ok, :done}
+      error -> error
     end
   end
 

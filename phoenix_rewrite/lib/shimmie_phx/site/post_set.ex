@@ -6,17 +6,18 @@ defmodule ShimmiePhoenix.Site.PostSet do
   alias ShimmiePhoenix.Repo
   alias ShimmiePhoenix.Site
   alias ShimmiePhoenix.Site.PostAdmin
-  alias ShimmiePhoenix.Site.Posts
   alias ShimmiePhoenix.Site.TagEdit
   alias ShimmiePhoenix.SourceURL
-
-  require Logger
 
   @allowed_ratings MapSet.new(["?", "s", "q", "e"])
 
   def apply(image_id, params, actor, remote_ip) do
+    ShimmiePhoenix.Mutation.atomic(fn -> do_apply(image_id, params, actor, remote_ip) end)
+  end
+
+  defp do_apply(image_id, params, actor, remote_ip) do
     with {:ok, id} <- parse_image_id(image_id),
-         post when not is_nil(post) <- Posts.get_post(id),
+         post when not is_nil(post) <- ShimmiePhoenix.Site.PostPolicy.fetch_visible(id, actor),
          true <- can_edit_anything?(params, actor),
          :ok <- maybe_update_tags(id, params, actor, remote_ip),
          :ok <- maybe_update_meta(id, post, params, actor) do
@@ -142,14 +143,7 @@ defmodule ShimmiePhoenix.Site.PostSet do
   end
 
   defp sqlite_exec(path, query) do
-    case System.cmd("sqlite3", [path, query], stderr_to_stdout: true) do
-      {_output, 0} ->
-        :ok
-
-      {output, _} ->
-        Logger.warning("post_set.sqlite failed: #{String.trim(output)}")
-        {:error, :update_failed}
-    end
+    ShimmiePhoenix.Mutation.sqlite_exec(path, query)
   end
 
   defp sqlite_value(nil), do: "NULL"

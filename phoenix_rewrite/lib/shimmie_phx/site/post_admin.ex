@@ -53,8 +53,10 @@ defmodule ShimmiePhoenix.Site.PostAdmin do
   def delete_image(image_id, actor) do
     with :ok <- require_admin(actor),
          post when not is_nil(post) <- Posts.get_post(image_id),
-         :ok <- delete_post_rows(post.id),
-         :ok <- maybe_clear_featured(post.id) do
+         :ok <-
+           ShimmiePhoenix.Mutation.atomic(fn ->
+             with :ok <- delete_post_rows(post.id), :ok <- maybe_clear_featured(post.id), do: :ok
+           end) do
       _ = safe_rm(Posts.media_path(post))
       _ = safe_rm(Posts.thumb_path(post))
       :ok
@@ -79,6 +81,10 @@ defmodule ShimmiePhoenix.Site.PostAdmin do
   end
 
   def add_note(image_id, actor, attrs) do
+    ShimmiePhoenix.Mutation.atomic(fn -> do_add_note(image_id, actor, attrs) end)
+  end
+
+  defp do_add_note(image_id, actor, attrs) do
     with {:ok, post} <- PostPolicy.writable_post(image_id, actor),
          true <- table_exists?("notes"),
          schema <- note_schema(),
@@ -95,6 +101,10 @@ defmodule ShimmiePhoenix.Site.PostAdmin do
   end
 
   def edit_note(image_id, note_id, actor, attrs) do
+    ShimmiePhoenix.Mutation.atomic(fn -> do_edit_note(image_id, note_id, actor, attrs) end)
+  end
+
+  defp do_edit_note(image_id, note_id, actor, attrs) do
     with {:ok, post} <- PostPolicy.writable_post(image_id, actor),
          true <- table_exists?("notes"),
          schema <- note_schema(),
@@ -111,6 +121,10 @@ defmodule ShimmiePhoenix.Site.PostAdmin do
   end
 
   def delete_note(image_id, note_id, actor) do
+    ShimmiePhoenix.Mutation.atomic(fn -> do_delete_note(image_id, note_id, actor) end)
+  end
+
+  defp do_delete_note(image_id, note_id, actor) do
     with :ok <- require_admin(actor),
          post when not is_nil(post) <- Posts.get_post(image_id),
          true <- table_exists?("notes"),
@@ -135,6 +149,10 @@ defmodule ShimmiePhoenix.Site.PostAdmin do
   end
 
   def nuke_notes(image_id, actor) do
+    ShimmiePhoenix.Mutation.atomic(fn -> do_nuke_notes(image_id, actor) end)
+  end
+
+  defp do_nuke_notes(image_id, actor) do
     with :ok <- require_admin(actor),
          post when not is_nil(post) <- Posts.get_post(image_id),
          true <- table_exists?("notes"),
@@ -410,9 +428,13 @@ defmodule ShimmiePhoenix.Site.PostAdmin do
     ShimmiePhoenix.WorkGate.run(fn ->
       thumb_path = Posts.thumb_path(post)
       File.mkdir_p!(Path.dirname(thumb_path))
-      temporary = thumb_path <> ".tmp." <> Base.url_encode64(:crypto.strong_rand_bytes(18), padding: false)
+
+      temporary =
+        thumb_path <> ".tmp." <> Base.url_encode64(:crypto.strong_rand_bytes(18), padding: false)
+
       try do
-        with {:ok, _dimensions} <- ShimmiePhoenix.MediaValidation.prepare(image_path, post.ext, temporary),
+        with {:ok, _dimensions} <-
+               ShimmiePhoenix.MediaValidation.prepare(image_path, post.ext, temporary),
              :ok <- File.rename(temporary, thumb_path) do
           :ok
         else
@@ -425,6 +447,10 @@ defmodule ShimmiePhoenix.Site.PostAdmin do
   end
 
   defp delete_post_rows(image_id) do
+    ShimmiePhoenix.Mutation.atomic(fn -> do_delete_post_rows(image_id) end)
+  end
+
+  defp do_delete_post_rows(image_id) do
     case sqlite_db_path() do
       nil -> delete_post_rows_repo(image_id)
       path -> delete_post_rows_sqlite(path, image_id)
@@ -606,14 +632,7 @@ defmodule ShimmiePhoenix.Site.PostAdmin do
   end
 
   defp sqlite_exec(path, sql) do
-    case System.cmd("sqlite3", [path, sql], stderr_to_stdout: true) do
-      {_out, 0} ->
-        :ok
-
-      {error, _} ->
-        Logger.warning("post_admin.sqlite exec failed: #{String.trim(error)}")
-        {:error, :sqlite_failed}
-    end
+    ShimmiePhoenix.Mutation.sqlite_exec(path, sql)
   end
 
   defp table_exists?(table) do

@@ -204,10 +204,7 @@ defmodule ShimmiePhoenix.Site.Store do
   end
 
   defp sqlite_exec(path, query) do
-    case System.cmd("sqlite3", [path, query], stderr_to_stdout: true) do
-      {_output, 0} -> :ok
-      _ -> {:error, :sqlite_failed}
-    end
+    ShimmiePhoenix.Mutation.sqlite_exec(path, query)
   end
 
   defp escape_sqlite_string(value), do: String.replace(value, "'", "''")

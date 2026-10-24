@@ -4,6 +4,7 @@ defmodule ShimmiePhoenixWeb.MediaController do
   alias ShimmiePhoenix.Site.Approval
   alias ShimmiePhoenix.Site.Posts
   alias ShimmiePhoenix.Site.Users
+  alias ShimmiePhoenix.{SafePath, Site}
 
   def image(conn, params), do: serve_post(conn, params, :image)
   def legacy_image(conn, params), do: image(conn, params)
@@ -61,10 +62,8 @@ defmodule ShimmiePhoenixWeb.MediaController do
   end
 
   defp regular_non_symlink_file?(path) do
-    case File.lstat(path) do
-      {:ok, %File.Stat{type: :regular}} -> true
-      _ -> false
-    end
+    root = Path.join(Site.legacy_root(), "data")
+    match?({:ok, _}, SafePath.regular_file(root, Path.relative_to(path, root)))
   end
 
   defp safe_header_filename(value) do

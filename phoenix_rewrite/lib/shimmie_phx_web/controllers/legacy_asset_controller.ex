@@ -124,14 +124,15 @@ defmodule ShimmiePhoenixWeb.LegacyAssetController do
   end
 
   defp safe_legacy_path(path_parts) do
-    legacy_root = Site.legacy_root()
-    requested = Path.expand(Path.join(path_parts), legacy_root)
-    prefix = legacy_root <> "/"
+    case path_parts do
+      ["data" | rest] ->
+        ShimmiePhoenix.SafePath.regular_file(
+          Path.join(Site.legacy_root(), "data"),
+          Path.join(rest)
+        )
 
-    if requested == legacy_root or String.starts_with?(requested, prefix) do
-      {:ok, requested}
-    else
-      {:error, :invalid_path}
+      parts ->
+        ShimmiePhoenix.SafePath.regular_file(Site.legacy_root(), Path.join(parts))
     end
   end
 end

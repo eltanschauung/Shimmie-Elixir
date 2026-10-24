@@ -10,6 +10,11 @@ Upgrading from unversioned sessions requires users to sign in again; do not rota
 `SECRET_KEY_BASE`. Logout clears this browser's credentials; changing a password
 invalidates existing login proofs on all devices. Favorites require a signed-in account.
 
+Before the first migration, set `SHIMMIE_BOOTSTRAP_ADMIN_PASSWORD` to a unique
+12+ character password (at most 72 UTF-8 bytes). `SHIMMIE_BOOTSTRAP_ADMIN_NAME`
+optionally changes the initial name from `admin`. There is no default password;
+upgrades never reset an existing administrator.
+
 ## Current Baseline
 - Phoenix app listens on `0.0.0.0:4001` in development.
 - Compatibility health endpoint: `GET /__compat/health` (enabled in `dev` and `test`; disabled by default in production)

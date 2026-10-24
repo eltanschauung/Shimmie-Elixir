@@ -16,6 +16,10 @@ function renderNote(note) {
     width() { return 100; }
     height() { return 100; }
     hover() { return this; }
+    attr(key, value) { this[key] = value; return this; }
+    off() { return this; }
+    on() { return this; }
+    remove() { return this; }
     resize() { return this; }
     append(value) { appended.push(value); return this; }
   }
@@ -31,7 +35,7 @@ function renderNote(note) {
   const script = resolve(__dirname, '../../../ext/notes/lib/jquery.imgnotes-1.0.min.js');
   vm.runInContext(readFileSync(script, 'utf8'), context);
   jquery.fn.imgNotes.call(new Element(), {
-    notes: [{ x1: 2, y1: 3, width: 20, height: 10, note }]
+    notes: [{ note_id: 42, x1: 2, y1: 3, width: 20, height: 10, note }]
   });
   return { created, appended };
 }
@@ -51,4 +55,5 @@ test('note text preserves punctuation, line breaks and placement', () => {
   assert.equal(appended[1].styles.whiteSpace, 'pre-wrap');
   assert.equal(appended[0].styles.left, '2px');
   assert.equal(appended[0].styles.width, '20px');
+  assert.equal(appended[0]['data-note-id'], '42');
 });

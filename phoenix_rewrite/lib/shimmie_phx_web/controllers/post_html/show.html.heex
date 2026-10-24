@@ -356,7 +356,7 @@
               </div>
               <%= if @can_edit_post_info do %>
                 <div class="edit">
-                  <input type="text" name="source" value={@source_href || ""} />
+                  <input type="text" name="source" value={@post.source || ""} />
                 </div>
               <% end %>
             </td>

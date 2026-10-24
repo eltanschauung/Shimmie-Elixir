@@ -31,11 +31,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
 	$('#addnote').click(function(){
 		$('#noteEditForm').hide();
-		$('#main_image').imgAreaSelect({ onSelectChange: showaddnote, x1: 120, y1: 90, x2: 280, y2: 210 });
+		var image = $('#main_image');
+		var width = Math.min(160, image.width());
+		var height = Math.min(120, image.height());
+		image.imgAreaSelect({ onSelectChange: showaddnote, x1: 0, y1: 0, x2: width, y2: height });
+		showaddnote(image[0], {x1: 0, y1: 0, width: width, height: height});
 		return false;
 	});
 
-	$('.note').click(function() {
+	$(document).on('click', '.note', function() {
+		if (!window.notes_edit) return;
 		$('#noteform').hide();
 		var imgOffset = $('#main_image').offset();
 
@@ -43,8 +48,9 @@ document.addEventListener('DOMContentLoaded', () => {
 		var y1 = parseInt(this.style.top) - imgOffset.top;
 		var width = parseInt(this.style.width);
 		var height = parseInt(this.style.height);
-		var text = $(this).next('.notep').text().replace(/([^>]?)\\n{2}/g, '$1\\n');
-		var id = $(this).next('.notep').next('.noteID').text();
+		var text = $(this).next('.notep').text();
+		var id = $(this).attr('data-note-id');
+		if (!id || !/^[1-9][0-9]*$/.test(id)) return;
 
 		$('#main_image').imgAreaSelect({ onSelectChange: showeditnote, x1: x1, y1: y1, x2: x1 + width, y2: y1 + height });
 		setEditNoteData(x1, y1, width, height, text, id);
@@ -84,7 +90,7 @@ function setEditNoteData(x1, y1, width, height, text, id) {
 	$('#EditNoteY1').val(y1);
 	$('#EditNoteHeight').val(height);
 	$('#EditNoteWidth').val(width);
-	$('#EditNoteNote').text(text);
+	$('#EditNoteNote').val(text);
 	$('#EditNoteID').val(id);
 	$('#DeleteNoteNoteID').val(id);
 }

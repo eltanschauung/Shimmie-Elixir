@@ -339,10 +339,7 @@ defmodule ShimmiePhoenix.Site.PrivateMessages do
   end
 
   defp sqlite_next_id(path) do
-    case sqlite_rows(path, "SELECT COALESCE(MAX(id), 0) + 1 FROM private_message") do
-      [[value] | _] -> {:ok, parse_int(value)}
-      _ -> {:error, :db_failed}
-    end
+    {:ok, ShimmiePhoenix.IDAllocator.next_sqlite!(path, "private_message")}
   end
 
   defp backend do

@@ -223,17 +223,11 @@ defmodule ShimmiePhoenix.Site.Comments do
   end
 
   defp next_comment_id(:repo) do
-    case Repo.query("SELECT COALESCE(MAX(id), 0) + 1 FROM comments", []) do
-      {:ok, %{rows: [[id]]}} -> parse_int(id)
-      _ -> 1
-    end
+    ShimmiePhoenix.IDAllocator.next!("comments")
   end
 
   defp next_comment_id({:sqlite, path}) do
-    case sqlite_single(path, "SELECT COALESCE(MAX(id), 0) + 1 FROM comments") do
-      nil -> 1
-      value -> parse_int(value)
-    end
+    ShimmiePhoenix.IDAllocator.next_sqlite!(path, "comments")
   end
 
   defp next_comment_id(_backend), do: 1

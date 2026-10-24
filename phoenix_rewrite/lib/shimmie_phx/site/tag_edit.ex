@@ -119,11 +119,7 @@ defmodule ShimmiePhoenix.Site.TagEdit do
       tag_id =
         case sqlite_single(path, "SELECT id FROM tags WHERE tag = #{sqlite_literal(tag)}") do
           nil ->
-            next_id =
-              case sqlite_single(path, "SELECT COALESCE(MAX(id), 0) + 1 FROM tags") do
-                nil -> 1
-                value -> parse_int(value)
-              end
+            next_id = ShimmiePhoenix.IDAllocator.next_sqlite!(path, "tags")
 
             _ =
               sqlite_exec(
@@ -193,17 +189,11 @@ defmodule ShimmiePhoenix.Site.TagEdit do
 
   defp upsert_tag_repo(tag) do
     sql =
-      "WITH existing AS (" <>
-        "  SELECT id FROM tags WHERE tag = $1" <>
-        "), next_id AS (" <>
-        "  SELECT COALESCE(MAX(id), 0) + 1 AS id FROM tags" <>
-        ") " <>
-        "INSERT INTO tags(id, tag, count) " <>
-        "SELECT COALESCE((SELECT id FROM existing), (SELECT id FROM next_id)), $1, 0 " <>
+      "INSERT INTO tags(id, tag, count) VALUES ($2, $1, 0) " <>
         "ON CONFLICT (tag) DO UPDATE SET tag = EXCLUDED.tag " <>
         "RETURNING id"
 
-    case Repo.query!(sql, [tag]).rows do
+    case Repo.query!(sql, [tag, next_id_repo("tags")]).rows do
       [[id] | _] -> parse_int(id)
       _ -> 0
     end
@@ -230,11 +220,7 @@ defmodule ShimmiePhoenix.Site.TagEdit do
     now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second) |> to_string()
 
     if sqlite_table_exists?(path, "tag_histories") do
-      next_id =
-        case sqlite_single(path, "SELECT COALESCE(MAX(id), 0) + 1 FROM tag_histories") do
-          nil -> 1
-          value -> parse_int(value)
-        end
+      next_id = ShimmiePhoenix.IDAllocator.next_sqlite!(path, "tag_histories")
 
       _ =
         sqlite_exec(
@@ -262,10 +248,7 @@ defmodule ShimmiePhoenix.Site.TagEdit do
   end
 
   defp next_id_repo(table) do
-    case Repo.query("SELECT COALESCE(MAX(id), 0) + 1 FROM #{table}", []) do
-      {:ok, %{rows: [[id]]}} -> parse_int(id)
-      _ -> 1
-    end
+    ShimmiePhoenix.IDAllocator.next!(table)
   end
 
   defp parse_image_id(value) do

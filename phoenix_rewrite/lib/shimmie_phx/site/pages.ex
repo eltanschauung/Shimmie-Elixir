@@ -1086,8 +1086,7 @@ defmodule ShimmiePhoenix.Site.Pages do
   end
 
   defp wiki_save_repo(title, body, owner_id, owner_ip) do
-    with {:ok, %{rows: [[next_id]]}} <-
-           Repo.query("SELECT COALESCE(MAX(id), 0) + 1 FROM wiki_pages"),
+    with next_id <- ShimmiePhoenix.IDAllocator.next!("wiki_pages"),
          {:ok, %{rows: [[next_revision]]}} <-
            Repo.query(
              "SELECT COALESCE(MAX(revision), 0) + 1 FROM wiki_pages WHERE LOWER(title) = LOWER($1)",
@@ -1107,7 +1106,7 @@ defmodule ShimmiePhoenix.Site.Pages do
 
   defp wiki_save_sqlite(path, title, body, owner_id, owner_ip) do
     with :ok <- ensure_sqlite_wiki_table(path),
-         {:ok, next_id} <- sqlite_single(path, "SELECT COALESCE(MAX(id), 0) + 1 FROM wiki_pages"),
+         next_id <- ShimmiePhoenix.IDAllocator.next_sqlite!(path, "wiki_pages"),
          {:ok, next_revision} <-
            sqlite_single(
              path,
@@ -1191,8 +1190,7 @@ defmodule ShimmiePhoenix.Site.Pages do
     case sqlite_db_path() do
       nil ->
         with :ok <- ensure_repo_blotter_table(),
-             {:ok, %{rows: [[next_id]]}} <-
-               Repo.query("SELECT COALESCE(MAX(id), 0) + 1 FROM blotter"),
+             next_id <- ShimmiePhoenix.IDAllocator.next!("blotter"),
              {:ok, _} <-
                Repo.query(
                  "INSERT INTO blotter(id, entry_date, entry_text, important) VALUES ($1, NOW(), $2, $3)",
@@ -1205,7 +1203,7 @@ defmodule ShimmiePhoenix.Site.Pages do
 
       path ->
         with :ok <- ensure_sqlite_blotter_table(path),
-             {:ok, next_id} <- sqlite_single(path, "SELECT COALESCE(MAX(id), 0) + 1 FROM blotter"),
+             next_id <- ShimmiePhoenix.IDAllocator.next_sqlite!(path, "blotter"),
              :ok <-
                sqlite_exec(
                  path,

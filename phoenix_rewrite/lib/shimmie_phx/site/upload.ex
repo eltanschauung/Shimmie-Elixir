@@ -567,19 +567,13 @@ defmodule ShimmiePhoenix.Site.Upload do
 
   defp upsert_tag!(tag) do
     sql =
-      "WITH existing AS (" <>
-        "  SELECT id FROM tags WHERE tag = $1" <>
-        "), next_id AS (" <>
-        "  SELECT COALESCE(MAX(id), 0) + 1 AS id FROM tags" <>
-        ") " <>
-        "INSERT INTO tags(id, tag, count) " <>
-        "SELECT COALESCE((SELECT id FROM existing), (SELECT id FROM next_id)), $1, 1 " <>
+      "INSERT INTO tags(id, tag, count) VALUES ($2, $1, 1) " <>
         "ON CONFLICT (tag) DO UPDATE SET count = COALESCE(tags.count, 0) + 1 " <>
         "RETURNING id"
 
-    case Repo.query!(sql, [tag]).rows do
+    case Repo.query!(sql, [tag, next_id("tags")]).rows do
       [[id] | _] -> parse_int(id, 0)
-      _ -> next_id("tags")
+      _ -> raise "Tag upsert failed"
     end
   end
 
@@ -615,10 +609,7 @@ defmodule ShimmiePhoenix.Site.Upload do
   end
 
   defp next_id(table) do
-    case Repo.query("SELECT COALESCE(MAX(id), 0) + 1 FROM #{table}", []) do
-      {:ok, %{rows: [[id]]}} -> parse_int(id, 1)
-      _ -> 1
-    end
+    ShimmiePhoenix.IDAllocator.next!(table)
   end
 
   defp normalized_tags(common_tags, specific_tags) do

@@ -750,12 +750,9 @@ defmodule ShimmiePhoenix.Site.Users do
 
   defp next_user_id do
     if use_sqlite?() do
-      sqlite_count("SELECT COALESCE(MAX(id), 0) + 1 FROM users")
+      ShimmiePhoenix.IDAllocator.next_sqlite!(sqlite_db_path!(), "users")
     else
-      case Repo.query("SELECT COALESCE(MAX(id), 0) + 1 FROM users", []) do
-        {:ok, %{rows: [[value]]}} -> parse_positive(value, 1)
-        _ -> 1
-      end
+      ShimmiePhoenix.IDAllocator.next!("users")
     end
   end
 

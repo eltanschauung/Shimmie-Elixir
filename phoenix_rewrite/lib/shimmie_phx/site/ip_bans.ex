@@ -308,16 +308,10 @@ defmodule ShimmiePhoenix.Site.IPBans do
   defp next_id do
     case sqlite_db_path() do
       nil ->
-        case Repo.query("SELECT COALESCE(MAX(id), 0) + 1 FROM bans", []) do
-          {:ok, %{rows: [[id]]}} -> parse_int(id)
-          _ -> 1
-        end
+        ShimmiePhoenix.IDAllocator.next!("bans")
 
       path ->
-        case sqlite_single(path, "SELECT COALESCE(MAX(id), 0) + 1 FROM bans") do
-          nil -> 1
-          value -> parse_int(value)
-        end
+        ShimmiePhoenix.IDAllocator.next_sqlite!(path, "bans")
     end
   end
 

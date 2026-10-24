@@ -8,6 +8,7 @@ defmodule ShimmiePhoenix.Site.PostSet do
   alias ShimmiePhoenix.Site.PostAdmin
   alias ShimmiePhoenix.Site.Posts
   alias ShimmiePhoenix.Site.TagEdit
+  alias ShimmiePhoenix.SourceURL
 
   require Logger
 
@@ -64,12 +65,12 @@ defmodule ShimmiePhoenix.Site.PostSet do
 
   defp maybe_update_meta(image_id, post, params, actor) do
     if can_edit_post_info?(actor) and has_meta_change?(params) do
-      source = normalize_source(Map.get(params, "source", Map.get(post, :source)))
-      parent_id = normalize_parent(Map.get(params, "parent"), image_id)
-      rating = normalize_rating(Map.get(params, "rating", Map.get(post, :rating)))
-      locked = truthy?(Map.get(params, "locked"))
-
-      update_meta(image_id, source, parent_id, rating, locked)
+      with {:ok, source} <- SourceURL.normalize(Map.get(params, "source", Map.get(post, :source))) do
+        parent_id = normalize_parent(Map.get(params, "parent"), image_id)
+        rating = normalize_rating(Map.get(params, "rating", Map.get(post, :rating)))
+        locked = truthy?(Map.get(params, "locked"))
+        update_meta(image_id, source, parent_id, rating, locked)
+      end
     else
       :ok
     end
@@ -97,13 +98,6 @@ defmodule ShimmiePhoenix.Site.PostSet do
 
         sqlite_exec(path, sql)
     end
-  end
-
-  defp normalize_source(nil), do: nil
-
-  defp normalize_source(value) do
-    trimmed = value |> to_string() |> String.trim()
-    if trimmed == "", do: nil, else: trimmed
   end
 
   defp normalize_parent(value, image_id) do

@@ -1714,6 +1714,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     do: "One or more files use a blocked or unsupported file type"
 
   defp upload_error_message(:invalid_upload), do: "Invalid upload payload"
+  defp upload_error_message(:invalid_source), do: "Source must be a valid HTTP(S) URL or plain text"
   defp upload_error_message(:invalid_url), do: "One or more URL uploads were invalid"
   defp upload_error_message(:transload_disabled), do: "URL uploads are disabled in board settings"
   defp upload_error_message(:transload_failed), do: "One or more URL uploads could not be fetched"

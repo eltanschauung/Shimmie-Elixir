@@ -87,6 +87,33 @@ defmodule ShimmiePhoenixWeb.PostControllerTest do
     :ok
   end
 
+  test "historical unsafe sources render as inert text", %{conn: conn} do
+    source = "javascript:void(window.sourceMarker=1)"
+    Repo.query!("UPDATE images SET source = $1 WHERE id = 101", [source])
+    body = conn |> get("/post/view/101") |> html_response(200)
+    assert body =~ source
+    assert Floki.find(Floki.parse_document!(body), "a[href^='javascript:']") == []
+
+    assert {:error, :invalid_source} =
+             ShimmiePhoenix.Site.PostSet.apply(
+               101,
+               %{"source" => source},
+               %{id: 1, class: "admin"},
+               "192.0.2.1"
+             )
+
+    assert {:error, :invalid_source} =
+             ShimmiePhoenix.Site.Upload.create_file_upload(
+               %Plug.Upload{path: "/not-an-upload", filename: "test.zip"},
+               %{id: 1, class: "admin"},
+               "192.0.2.1",
+               "",
+               "",
+               source,
+               ""
+             )
+  end
+
   test "GET /post/view/:id renders legacy post details", %{conn: conn} do
     conn = get(conn, "/post/view/101")
     body = html_response(conn, 200)

@@ -9,6 +9,7 @@ defmodule ShimmiePhoenix.Site.Upload do
   alias ShimmiePhoenix.Site.Permissions
   alias ShimmiePhoenix.Site.Store
   alias ShimmiePhoenix.Site.TagRules
+  alias ShimmiePhoenix.SourceURL
 
   @image_exts ~w(jpg jpeg png gif webp avif)
   @allowed_upload_exts MapSet.new(~w(
@@ -52,7 +53,8 @@ defmodule ShimmiePhoenix.Site.Upload do
   def can_upload?(_), do: false
 
   def upload_denied_message(actor) do
-    if anonymous_actor?(actor), do: "Anonymous uploads are disabled by permissions",
+    if anonymous_actor?(actor),
+      do: "Anonymous uploads are disabled by permissions",
       else: "Your account class does not have upload permission"
   end
 
@@ -71,7 +73,8 @@ defmodule ShimmiePhoenix.Site.Upload do
         10 * 1024 * 1024
       )
 
-    with {:ok, stat} <- File.stat(upload.path) do
+    with {:ok, source} <- SourceURL.normalize(first_non_blank([row_source, common_source])),
+         {:ok, stat} <- File.stat(upload.path) do
       cond do
         stat.size <= 0 ->
           {:error, :empty_upload}
@@ -93,7 +96,7 @@ defmodule ShimmiePhoenix.Site.Upload do
                   filename = sanitize_filename(upload.filename, ext)
                   mime = choose_mime(ext)
                   width_height = media_dimensions(upload.path, ext)
-                  source = first_non_blank([row_source, common_source])
+                  source = source || ""
                   tags = normalized_tags(common_tags, specific_tags)
                   now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
                   owner_id = actor_id(actor)

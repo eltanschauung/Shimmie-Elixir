@@ -13,6 +13,7 @@ defmodule ShimmiePhoenixWeb.PostController do
   alias ShimmiePhoenix.Site.TelegramAlerts
   alias ShimmiePhoenix.Site.Favorites
   alias ShimmiePhoenix.Site.Users
+  alias ShimmiePhoenix.SourceURL
 
   def view(conn, %{"image_id" => image_id}) do
     current_user = conn.assigns[:legacy_user] || Users.current_user(conn)
@@ -97,7 +98,7 @@ defmodule ShimmiePhoenixWeb.PostController do
               rating_label: Posts.rating_label(Map.get(post, :rating, "?")),
               source_text:
                 if(is_binary(post.source) and post.source != "", do: post.source, else: "Unknown"),
-              source_href: post.source,
+              source_href: SourceURL.href(post.source),
               locked_label: if(Map.get(post, :locked, false), do: "Yes", else: "No"),
               parent_id: Map.get(post, :parent_id),
               recaptcha_key: recaptcha_key,

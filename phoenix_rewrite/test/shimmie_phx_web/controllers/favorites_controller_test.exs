@@ -81,4 +81,11 @@ defmodule ShimmiePhoenixWeb.FavoritesControllerTest do
     conn = post(conn, "/favourite/add/999999", %{"user_id" => "2"})
     assert response(conn, 404)
   end
+
+  test "favorite writes reject nonexistent accounts without creating orphan rows" do
+    assert ShimmiePhoenix.Site.Favorites.user_exists?(2)
+    refute ShimmiePhoenix.Site.Favorites.user_exists?(999_999)
+    assert {:error, :user_not_found} = ShimmiePhoenix.Site.Favorites.set(301, 999_999, true)
+    assert Repo.query!("SELECT COUNT(*) FROM user_favorites WHERE user_id = 999999").rows == [[0]]
+  end
 end

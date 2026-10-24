@@ -22,7 +22,7 @@ defmodule ShimmiePhoenix.Site.Favorites do
       nil ->
         case Repo.query("SELECT 1 FROM users WHERE id = $1 LIMIT 1", [user_id]) do
           {:ok, %{rows: [[1]]}} -> true
-          {:ok, %{rows: _}} -> true
+          {:ok, %{rows: _}} -> false
           _ -> false
         end
 

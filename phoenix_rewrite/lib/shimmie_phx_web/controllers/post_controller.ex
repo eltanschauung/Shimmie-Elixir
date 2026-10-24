@@ -54,7 +54,7 @@ defmodule ShimmiePhoenixWeb.PostController do
             notes_json =
               id
               |> PostAdmin.notes_for_image()
-              |> Jason.encode!()
+              |> Jason.encode!(escape: :html_safe)
 
             logged_in? = PostAdmin.logged_in?(current_user)
             admin? = PostAdmin.admin?(current_user)

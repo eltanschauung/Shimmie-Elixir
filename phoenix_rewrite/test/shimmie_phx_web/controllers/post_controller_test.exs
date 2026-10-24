@@ -111,6 +111,28 @@ defmodule ShimmiePhoenixWeb.PostControllerTest do
     assert get_resp_header(conn, "cache-control") == ["private, no-store"]
   end
 
+  test "a stored note cannot terminate the page's inline JSON script", %{conn: conn} do
+    payload = "</script><script>window.noteAuditMarker = 1</script>"
+
+    conn =
+      conn
+      |> init_test_session(%{site_user_id: 2})
+      |> post("/note/add_note", %{
+        "image_id" => "101",
+        "note_x1" => "0",
+        "note_y1" => "0",
+        "note_width" => "20",
+        "note_height" => "20",
+        "note_text" => payload
+      })
+
+    assert redirected_to(conn) == "/post/view/101"
+    body = conn |> recycle() |> get("/post/view/101") |> html_response(200)
+    refute body =~ payload
+    [_, encoded] = Regex.run(~r/\bnotes = ([^\n]+)/, body)
+    assert [%{"note" => ^payload}] = Jason.decode!(String.trim(encoded))
+  end
+
   test "GET /post/view/:id hides approval controls for non-admins", %{conn: conn} do
     conn = get(conn, "/post/view/101")
     body = html_response(conn, 200)

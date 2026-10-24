@@ -80,6 +80,43 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
              [[1, "anon comment"]]
   end
 
+  test "comment create permission is enforced on direct submissions", %{conn: conn} do
+    assert :ok = ShimmiePhoenix.Site.Store.put_config("perm_comment_create", "admin")
+
+    for actor <- [nil, %{id: 2, class: "user"}, %{id: 0, class: "admin"}] do
+      assert {:error, :permission_denied} =
+               Comments.add(
+                 %{
+                   "image_id" => "101",
+                   "comment" => "not allowed",
+                   "hash" => Comments.form_hash("127.0.0.1")
+                 },
+                 actor,
+                 "127.0.0.1"
+               )
+    end
+
+    conn =
+      conn
+      |> init_test_session(%{site_user_id: 2})
+      |> post("/comment/add", %{
+        "image_id" => "101",
+        "comment" => "not allowed",
+        "hash" => Comments.form_hash("127.0.0.1")
+      })
+
+    assert response(conn, 403) == "Comment Blocked"
+    assert Repo.query!("SELECT COUNT(*) FROM comments").rows == [[0]]
+  end
+
+  test "anonymous UI permission matches the configurable create capability" do
+    assert Comments.can_create_comment?(nil)
+    refute Comments.can_create_comment?(%{id: 0, class: "admin"})
+    assert :ok = ShimmiePhoenix.Site.Store.put_config("perm_comment_create", "admin")
+    refute Comments.can_create_comment?(nil)
+    assert Comments.can_create_comment?(%{id: 3, class: "admin"})
+  end
+
   test "POST /comment/add rejects empty comment", %{conn: conn} do
     conn =
       conn

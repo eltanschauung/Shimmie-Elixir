@@ -17,6 +17,8 @@ defmodule ShimmiePhoenix.Site.Comments do
     actor_id(actor) > 0 and Permissions.allowed?(:comment_delete, actor_class(actor))
   end
 
+  def can_create_comment?(nil), do: Permissions.allowed?(:comment_create, "anonymous")
+
   def can_create_comment?(actor) do
     actor_id(actor) > 0 and Permissions.allowed?(:comment_create, actor_class(actor))
   end
@@ -45,7 +47,8 @@ defmodule ShimmiePhoenix.Site.Comments do
   def add(params, actor, remote_ip) when is_map(params) do
     backend = db_backend()
 
-    with {:ok, image_id} <- parse_image_id(Map.get(params, "image_id")),
+    with true <- can_create_comment?(actor),
+         {:ok, image_id} <- parse_image_id(Map.get(params, "image_id")),
          {:ok, comment} <- normalize_comment(Map.get(params, "comment")),
          :ok <- ensure_image_exists(image_id, backend),
          :ok <- verify_anonymous_form_hash(actor, params["hash"], remote_ip),
@@ -54,6 +57,7 @@ defmodule ShimmiePhoenix.Site.Comments do
            insert_comment(image_id, actor_user_id(actor), remote_ip, comment, backend) do
       {:ok, image_id}
     else
+      false -> {:error, :permission_denied}
       {:error, _} = error -> error
       _ -> {:error, :create_failed}
     end

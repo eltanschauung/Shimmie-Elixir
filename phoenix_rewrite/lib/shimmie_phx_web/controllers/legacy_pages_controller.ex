@@ -9,6 +9,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
   alias ShimmiePhoenix.Site.Permissions
   alias ShimmiePhoenix.Site.PrivateMessages
   alias ShimmiePhoenix.Site.Posts
+  alias ShimmiePhoenix.Site.PostPolicy
   alias ShimmiePhoenix.Site.Approval
   alias ShimmiePhoenix.Site.TelegramAlerts
   alias ShimmiePhoenix.Site.UserProfile
@@ -18,6 +19,8 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
   alias ShimmiePhoenix.Site.Upload
   alias ShimmiePhoenix.Site.Users
   alias ShimmiePhoenix.Repo
+
+  @api_selector_limit 200
 
   def comment_list(conn, params) do
     conn = assign(conn, :include_comment_reply_assets, true)
@@ -1602,7 +1605,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
 
   def danbooru_find_posts(conn, params) do
     payload = params |> danbooru_posts(conn) |> Enum.map(&danbooru_post_payload/1)
-    json(conn, payload)
+    conn |> private_api_cache() |> json(payload)
   end
 
   def danbooru_find_posts_xml(conn, params) do
@@ -1646,6 +1649,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
         ["</posts>"]
 
     conn
+    |> private_api_cache()
     |> put_resp_content_type("application/xml")
     |> send_resp(200, Enum.join(lines, "\n"))
   end
@@ -2043,13 +2047,13 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     md5s = parse_csv_md5s(params["md5"])
 
     cond do
-      ids != [] ->
+      Map.has_key?(params, "id") ->
         ids
-        |> Enum.map(&Posts.get_post/1)
+        |> Enum.map(&PostPolicy.fetch_visible(&1, current_user))
         |> Enum.reject(&is_nil/1)
 
-      md5s != [] ->
-        posts_by_md5(md5s)
+      Map.has_key?(params, "md5") ->
+        posts_by_md5(md5s, current_user)
 
       true ->
         search = params["tags"] |> to_string() |> String.trim()
@@ -2094,14 +2098,20 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     }
   end
 
-  defp posts_by_md5(md5s) do
+  defp private_api_cache(conn) do
+    if conn.assigns[:legacy_user] || Users.current_user(conn),
+      do: put_resp_header(conn, "cache-control", "private, no-store"),
+      else: conn
+  end
+
+  defp posts_by_md5(md5s, actor) do
     case sqlite_path() do
-      nil -> posts_by_md5_repo(md5s)
-      path -> posts_by_md5_sqlite(path, md5s)
+      nil -> posts_by_md5_repo(md5s, actor)
+      path -> posts_by_md5_sqlite(path, md5s, actor)
     end
   end
 
-  defp posts_by_md5_repo(md5s) do
+  defp posts_by_md5_repo(md5s, actor) do
     md5s
     |> Enum.flat_map(fn md5 ->
       case Repo.query(
@@ -2111,7 +2121,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
              ]
            ) do
         {:ok, %{rows: [[id]]}} ->
-          case Posts.get_post(parse_positive_int(id)) do
+          case PostPolicy.fetch_visible(parse_positive_int(id), actor) do
             nil -> []
             post -> [post]
           end
@@ -2122,7 +2132,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     end)
   end
 
-  defp posts_by_md5_sqlite(path, md5s) do
+  defp posts_by_md5_sqlite(path, md5s, actor) do
     md5s
     |> Enum.flat_map(fn md5 ->
       sql =
@@ -2132,7 +2142,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
         {output, 0} ->
           case Integer.parse(output |> String.trim()) do
             {id, ""} when id > 0 ->
-              case Posts.get_post(id) do
+              case PostPolicy.fetch_visible(id, actor) do
                 nil -> []
                 post -> [post]
               end
@@ -2161,8 +2171,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
 
   defp parse_csv_ints(value) do
     value
-    |> to_string()
-    |> String.split(",", trim: true)
+    |> bounded_selectors()
     |> Enum.map(&parse_positive_int/1)
     |> Enum.reject(&(&1 <= 0))
     |> Enum.uniq()
@@ -2170,13 +2179,19 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
 
   defp parse_csv_md5s(value) do
     value
-    |> to_string()
-    |> String.split(",", trim: true)
+    |> bounded_selectors()
     |> Enum.map(&String.trim/1)
     |> Enum.map(&String.downcase/1)
     |> Enum.filter(&String.match?(&1, ~r/\A[0-9a-f]{32}\z/))
     |> Enum.uniq()
   end
+
+  defp bounded_selectors(value) when is_binary(value) and byte_size(value) <= 16_384 do
+    parts = String.split(value, ",", parts: @api_selector_limit + 1, trim: true)
+    if length(parts) <= @api_selector_limit, do: parts, else: []
+  end
+
+  defp bounded_selectors(_), do: []
 
   defp parse_page(value) do
     case Integer.parse(to_string(value || "")) do

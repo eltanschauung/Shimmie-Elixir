@@ -4,6 +4,7 @@ defmodule ShimmiePhoenix.Site.Store do
   """
 
   alias ShimmiePhoenix.Site
+  alias ShimmiePhoenix.Cache
   alias ShimmiePhoenix.Repo
 
   @sqlite_separator <<31>>
@@ -40,8 +41,7 @@ defmodule ShimmiePhoenix.Site.Store do
            [name, value]
          ) do
       {:ok, _} ->
-        table = ensure_cache_table()
-        :ets.delete(table, @repo_config_cache_key)
+        Cache.delete(@cache_table, @repo_config_cache_key)
         :ok
 
       _ ->
@@ -55,17 +55,16 @@ defmodule ShimmiePhoenix.Site.Store do
   end
 
   defp repo_config_cache do
-    table = ensure_cache_table()
     key = @repo_config_cache_key
     now = System.monotonic_time(:millisecond)
 
-    case :ets.lookup(table, key) do
+    case Cache.lookup(@cache_table, key) do
       [{^key, cache, expires_at}] when expires_at > now ->
         cache
 
       _ ->
         cache = load_repo_config_cache()
-        :ets.insert(table, {key, cache, now + @config_cache_ttl_ms})
+        Cache.insert(@cache_table, {key, cache, now + @config_cache_ttl_ms})
         cache
     end
   end
@@ -98,8 +97,7 @@ defmodule ShimmiePhoenix.Site.Store do
 
     case sqlite_exec(path, sql) do
       :ok ->
-        table = ensure_cache_table()
-        :ets.delete(table, {:config_map, path})
+        Cache.delete(@cache_table, {:config_map, path})
         :ok
 
       error ->
@@ -108,17 +106,16 @@ defmodule ShimmiePhoenix.Site.Store do
   end
 
   defp sqlite_config_cache(path) do
-    table = ensure_cache_table()
     key = {:config_map, path}
     now = System.monotonic_time(:millisecond)
 
-    case :ets.lookup(table, key) do
+    case Cache.lookup(@cache_table, key) do
       [{^key, cache, expires_at}] when expires_at > now ->
         cache
 
       _ ->
         cache = load_sqlite_config_cache(path)
-        :ets.insert(table, {key, cache, now + @config_cache_ttl_ms})
+        Cache.insert(@cache_table, {key, cache, now + @config_cache_ttl_ms})
         cache
     end
   end
@@ -210,13 +207,6 @@ defmodule ShimmiePhoenix.Site.Store do
     case System.cmd("sqlite3", [path, query], stderr_to_stdout: true) do
       {_output, 0} -> :ok
       _ -> {:error, :sqlite_failed}
-    end
-  end
-
-  defp ensure_cache_table do
-    case :ets.whereis(@cache_table) do
-      :undefined -> :ets.new(@cache_table, [:named_table, :public, read_concurrency: true])
-      tid -> tid
     end
   end
 

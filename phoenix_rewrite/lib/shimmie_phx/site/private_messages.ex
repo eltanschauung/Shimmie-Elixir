@@ -5,6 +5,7 @@ defmodule ShimmiePhoenix.Site.PrivateMessages do
 
   alias ShimmiePhoenix.Repo
   alias ShimmiePhoenix.Site
+  alias ShimmiePhoenix.Cache
   alias ShimmiePhoenix.Site.Users
 
   @sqlite_separator <<31>>
@@ -435,22 +436,15 @@ defmodule ShimmiePhoenix.Site.PrivateMessages do
   defp admin?(%{class: class}), do: to_string(class) == "admin"
   defp admin?(_), do: false
 
-  defp cache_table do
-    case :ets.whereis(@cache_table) do
-      :undefined -> :ets.new(@cache_table, [:named_table, :public, read_concurrency: true])
-      table -> table
-    end
-  end
-
   defp cache_get(key) do
-    case :ets.lookup(cache_table(), key) do
+    case Cache.lookup(@cache_table, key) do
       [{^key, true}] -> true
       _ -> false
     end
   end
 
   defp cache_put(key) do
-    :ets.insert(cache_table(), {key, true})
+    Cache.insert(@cache_table, {key, true})
     :ok
   end
 

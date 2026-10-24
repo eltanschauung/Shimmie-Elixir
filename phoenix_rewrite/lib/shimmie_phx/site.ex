@@ -5,6 +5,7 @@ defmodule ShimmiePhoenix.Site do
 
   @define_re_template ~r/define\(\s*['"]%KEY%['"]\s*,\s*([^)]+)\)/
   @cache_table :shimmie_legacy_cache
+  alias ShimmiePhoenix.Cache
 
   def legacy_root, do: Application.get_env(:shimmie_phx, :legacy_root)
   def legacy_assets_dir, do: Application.get_env(:shimmie_phx, :legacy_assets_dir)
@@ -152,17 +153,16 @@ defmodule ShimmiePhoenix.Site do
       true ->
         case File.stat(path) do
           {:ok, %{mtime: mtime}} ->
-            table = ensure_cache_table()
             key = {:php_config_content, path}
 
-            case :ets.lookup(table, key) do
+            case Cache.lookup(@cache_table, key) do
               [{^key, ^mtime, content}] ->
                 {:ok, content}
 
               _ ->
                 case File.read(path) do
                   {:ok, content} ->
-                    :ets.insert(table, {key, mtime, content})
+                    Cache.insert(@cache_table, {key, mtime, content})
                     {:ok, content}
 
                   error ->
@@ -196,11 +196,4 @@ defmodule ShimmiePhoenix.Site do
   defp unquote_if_quoted("'" <> rest), do: String.trim_trailing(rest, "'")
   defp unquote_if_quoted("\"" <> rest), do: String.trim_trailing(rest, "\"")
   defp unquote_if_quoted(value), do: value
-
-  defp ensure_cache_table do
-    case :ets.whereis(@cache_table) do
-      :undefined -> :ets.new(@cache_table, [:named_table, :public, read_concurrency: true])
-      tid -> tid
-    end
-  end
 end

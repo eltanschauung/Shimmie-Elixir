@@ -8,6 +8,7 @@ defmodule ShimmiePhoenix.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      ShimmiePhoenix.Cache,
       ShimmiePhoenixWeb.Telemetry,
       ShimmiePhoenix.Repo,
       {DNSCluster, query: Application.get_env(:shimmie_phx, :dns_cluster_query) || :ignore},

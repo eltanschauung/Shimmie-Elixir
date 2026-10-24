@@ -7,6 +7,7 @@ defmodule ShimmiePhoenix.Site.IPBans do
 
   alias ShimmiePhoenix.Repo
   alias ShimmiePhoenix.Site
+  alias ShimmiePhoenix.Cache
   alias ShimmiePhoenix.Site.Appearance
   alias ShimmiePhoenix.Site.Store
   alias ShimmiePhoenix.Site.Users
@@ -227,16 +228,15 @@ defmodule ShimmiePhoenix.Site.IPBans do
   end
 
   defp active_bans do
-    table = ensure_cache_table()
     now = System.monotonic_time(:millisecond)
 
-    case :ets.lookup(table, @cache_key_active) do
+    case Cache.lookup(@cache_table, @cache_key_active) do
       [{@cache_key_active, bans, expires_at}] when expires_at > now ->
         bans
 
       _ ->
         bans = load_active_bans()
-        :ets.insert(table, {@cache_key_active, bans, now + @cache_ttl_ms})
+        Cache.insert(@cache_table, {@cache_key_active, bans, now + @cache_ttl_ms})
         bans
     end
   end
@@ -256,8 +256,7 @@ defmodule ShimmiePhoenix.Site.IPBans do
   end
 
   defp invalidate_cache do
-    table = ensure_cache_table()
-    :ets.delete(table, @cache_key_active)
+    Cache.delete(@cache_table, @cache_key_active)
     :ok
   end
 
@@ -640,12 +639,5 @@ defmodule ShimmiePhoenix.Site.IPBans do
 
   defp active_where_sql(false, prefix) when is_binary(prefix) do
     "WHERE (#{prefix}expires IS NULL OR #{prefix}expires > CURRENT_TIMESTAMP)"
-  end
-
-  defp ensure_cache_table do
-    case :ets.whereis(@cache_table) do
-      :undefined -> :ets.new(@cache_table, [:named_table, :public, read_concurrency: true])
-      tid -> tid
-    end
   end
 end

@@ -6,6 +6,7 @@ defmodule ShimmiePhoenix.Site do
   @define_re_template ~r/define\(\s*['"]%KEY%['"]\s*,\s*([^)]+)\)/
   @cache_table :shimmie_legacy_cache
   alias ShimmiePhoenix.Cache
+  alias ShimmiePhoenix.DatabaseURL
 
   def legacy_root, do: Application.get_env(:shimmie_phx, :legacy_root)
   def legacy_assets_dir, do: Application.get_env(:shimmie_phx, :legacy_assets_dir)
@@ -71,57 +72,10 @@ defmodule ShimmiePhoenix.Site do
   end
 
   def redacted_database_url do
-    case database_url() do
-      nil ->
-        nil
-
-      value ->
-        Regex.replace(~r/(:\/\/[^:]+:)([^@]+)(@)/, value, "\\1******\\3")
-    end
+    DatabaseURL.redact(database_url())
   end
 
-  def legacy_dsn_to_ecto_url(nil), do: nil
-
-  def legacy_dsn_to_ecto_url(dsn) do
-    case String.split(dsn, ":", parts: 2) do
-      ["pgsql", kv] -> pgsql_dsn_to_url(kv)
-      _ -> nil
-    end
-  end
-
-  defp pgsql_dsn_to_url(kv) do
-    params =
-      kv
-      |> String.split(";", trim: true)
-      |> Enum.reduce(%{}, fn part, acc ->
-        case String.split(part, "=", parts: 2) do
-          [k, v] -> Map.put(acc, k, v)
-          _ -> acc
-        end
-      end)
-
-    user = Map.get(params, "user", "postgres")
-    pass = Map.get(params, "password", "")
-    host = Map.get(params, "host", "localhost")
-    port = Map.get(params, "port")
-    db = Map.get(params, "dbname", "shimmie")
-
-    userinfo =
-      if pass == "" do
-        user
-      else
-        "#{user}:#{pass}"
-      end
-
-    hostinfo =
-      if is_nil(port) || port == "" do
-        host
-      else
-        "#{host}:#{port}"
-      end
-
-    "ecto://#{userinfo}@#{hostinfo}/#{db}"
-  end
+  defdelegate legacy_dsn_to_ecto_url(dsn), to: DatabaseURL, as: :from_legacy_dsn
 
   defp php_constant(key) do
     with {:ok, content} <- php_config_content() do

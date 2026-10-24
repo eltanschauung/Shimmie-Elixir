@@ -8,46 +8,6 @@ legacy_config_path =
   System.get_env("SHIMMIE_LEGACY_CONFIG_PATH") ||
     Path.join([legacy_root, "data", "config", "shimmie.conf.php"])
 
-dsn_to_ecto_url = fn dsn ->
-  case String.split(dsn, ":", parts: 2) do
-    ["pgsql", kv] ->
-      params =
-        kv
-        |> String.split(";", trim: true)
-        |> Enum.reduce(%{}, fn part, acc ->
-          case String.split(part, "=", parts: 2) do
-            [k, v] -> Map.put(acc, k, v)
-            _ -> acc
-          end
-        end)
-
-      user = Map.get(params, "user", "postgres")
-      pass = Map.get(params, "password", "")
-      host = Map.get(params, "host", "localhost")
-      port = Map.get(params, "port")
-      db = Map.get(params, "dbname", "shimmie")
-
-      userinfo =
-        if pass == "" do
-          user
-        else
-          "#{user}:#{pass}"
-        end
-
-      hostinfo =
-        if is_nil(port) || port == "" do
-          host
-        else
-          "#{host}:#{port}"
-        end
-
-      "ecto://#{userinfo}@#{hostinfo}/#{db}"
-
-    _ ->
-      nil
-  end
-end
-
 legacy_dsn =
   cond do
     System.get_env("SHIMMIE_LEGACY_DSN") ->
@@ -70,7 +30,7 @@ legacy_dsn =
   end
 
 resolved_database_url =
-  System.get_env("SHIMMIE_DATABASE_URL") || if(legacy_dsn, do: dsn_to_ecto_url.(legacy_dsn))
+  System.get_env("SHIMMIE_DATABASE_URL") || ShimmiePhoenix.DatabaseURL.from_legacy_dsn(legacy_dsn)
 
 config :shimmie_phx,
   legacy_root: legacy_root,

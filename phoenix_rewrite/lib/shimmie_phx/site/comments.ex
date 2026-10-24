@@ -65,18 +65,22 @@ defmodule ShimmiePhoenix.Site.Comments do
 
   def add(_, _, _), do: {:error, :invalid_request}
 
-  def delete(comment_id, actor) do
-    backend = db_backend()
-
+  def deletion_target(comment_id, actor) do
     with {:ok, parsed_id} <- parse_image_id(comment_id),
          true <- can_delete_comment?(actor),
-         {:ok, image_id} <- comment_image_id(parsed_id, backend),
-         :ok <- delete_comment_row(parsed_id, backend) do
-      {:ok, image_id}
+         {:ok, image_id} <- comment_image_id(parsed_id, db_backend()) do
+      {:ok, %{id: parsed_id, image_id: image_id}}
     else
       false -> {:error, :permission_denied}
       {:error, _} = error -> error
       _ -> {:error, :delete_failed}
+    end
+  end
+
+  def delete(comment_id, actor) do
+    with {:ok, target} <- deletion_target(comment_id, actor),
+         :ok <- delete_comment_row(target.id, db_backend()) do
+      {:ok, target.image_id}
     end
   end
 

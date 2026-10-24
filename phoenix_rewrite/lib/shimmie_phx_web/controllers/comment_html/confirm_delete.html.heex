@@ -1,0 +1,13 @@
+<article class="noleft">
+  <section id="DeleteCommentmain">
+    <h3>Delete Comment</h3>
+    <div class="blockbody">
+      <p>Delete comment #<%= @target.id %>? This cannot be undone.</p>
+      <form action={"/comment/delete/#{@target.id}/#{@target.image_id}"} method="POST">
+        <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+        <input type="submit" value="Delete Comment" />
+        <a href={"/post/view/#{@target.image_id}"}>Cancel</a>
+      </form>
+    </div>
+  </section>
+</article>

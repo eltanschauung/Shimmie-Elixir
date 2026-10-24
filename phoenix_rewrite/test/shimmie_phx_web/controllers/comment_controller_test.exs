@@ -143,7 +143,7 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
     assert Repo.query!("SELECT COUNT(*) FROM comments").rows == [[0]]
   end
 
-  test "GET /comment/delete/:comment_id/:image_id deletes comment for admin", %{conn: conn} do
+  test "GET confirms without deleting and POST with CSRF deletes for admin", %{conn: conn} do
     Repo.query!(
       "INSERT INTO comments(id, image_id, owner_id, owner_ip, posted, comment) VALUES ($1, $2, $3, $4, $5, $6)",
       [501, 101, 2, "127.0.0.1", ~N[2026-01-01 13:00:00], "delete me"]
@@ -152,14 +152,27 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
     conn =
       conn
       |> init_test_session(%{site_user_id: 3})
-      |> get("/comment/delete/501/101")
+      |> put_private(:plug_skip_csrf_protection, false)
+      |> get("/comment/delete/501/999")
+
+    body = html_response(conn, 200)
+    assert body =~ ~s(action="/comment/delete/501/101" method="POST")
+    assert body =~ ~s(href="/post/view/101")
+    assert Repo.query!("SELECT COUNT(*) FROM comments WHERE id = 501").rows == [[1]]
+    [_, token] = Regex.run(~r/name="_csrf_token" value="([^"]+)"/, body)
+
+    conn =
+      conn
+      |> recycle()
+      |> put_private(:plug_skip_csrf_protection, false)
+      |> post("/comment/delete/501/999", %{"_csrf_token" => token})
 
     assert redirected_to(conn) == "/post/view/101"
 
     assert Repo.query!("SELECT COUNT(*) FROM comments WHERE id = 501").rows == [[0]]
   end
 
-  test "GET /comment/delete/:comment_id/:image_id deletes comment for Tag-Dono", %{conn: conn} do
+  test "POST /comment/delete/:comment_id/:image_id deletes comment for Tag-Dono", %{conn: conn} do
     Repo.query!(
       "INSERT INTO comments(id, image_id, owner_id, owner_ip, posted, comment) VALUES ($1, $2, $3, $4, $5, $6)",
       [502, 101, 2, "127.0.0.1", ~N[2026-01-01 13:00:00], "delete me too"]
@@ -168,7 +181,7 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
     conn =
       conn
       |> init_test_session(%{site_user_id: 4})
-      |> get("/comment/delete/502/101")
+      |> post("/comment/delete/502/101")
 
     assert redirected_to(conn) == "/post/view/101"
 
@@ -188,5 +201,34 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
 
     assert response(conn, 403) =~ "Permission Denied"
     assert Repo.query!("SELECT COUNT(*) FROM comments WHERE id = 503").rows == [[1]]
+
+    conn =
+      build_conn() |> init_test_session(%{site_user_id: 2}) |> post("/comment/delete/503/101")
+
+    assert response(conn, 403) == "Permission Denied"
+    assert Repo.query!("SELECT COUNT(*) FROM comments WHERE id = 503").rows == [[1]]
+  end
+
+  test "comment deletion rejects missing and invalid CSRF tokens", %{conn: conn} do
+    Repo.query!(
+      "INSERT INTO comments(id, image_id, owner_id, comment) VALUES (504, 101, 2, 'keep me')"
+    )
+
+    for params <- [%{}, %{"_csrf_token" => "invalid"}] do
+      assert_raise Plug.CSRFProtection.InvalidCSRFTokenError, fn ->
+        conn
+        |> init_test_session(%{site_user_id: 3})
+        |> put_private(:plug_skip_csrf_protection, false)
+        |> post("/comment/delete/504/101", params)
+      end
+
+      assert Repo.query!("SELECT COUNT(*) FROM comments WHERE id = 504").rows == [[1]]
+    end
+  end
+
+  test "confirmation rejects invalid and missing comments", %{conn: conn} do
+    conn = init_test_session(conn, %{site_user_id: 3})
+    assert response(get(conn, "/comment/delete/not-an-id/101"), 400) == "Bad Request"
+    assert response(get(conn, "/comment/delete/999/101"), 404) == "Not Found"
   end
 end

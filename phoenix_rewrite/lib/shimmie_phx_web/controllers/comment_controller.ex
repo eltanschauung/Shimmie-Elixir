@@ -11,7 +11,9 @@ defmodule ShimmiePhoenixWeb.CommentController do
 
     case Comments.add(params, actor, remote_ip) do
       {:ok, image_id} ->
-        _ = TelegramAlerts.notify_comment_added(image_id, actor, to_string(params["comment"] || ""))
+        _ =
+          TelegramAlerts.notify_comment_added(image_id, actor, to_string(params["comment"] || ""))
+
         redirect(conn, to: "/post/view/#{image_id}#comment_on_#{image_id}")
 
       {:error, :invalid_image_id} ->
@@ -42,28 +44,37 @@ defmodule ShimmiePhoenixWeb.CommentController do
     end
   end
 
-  def delete(conn, %{"comment_id" => comment_id, "image_id" => image_id}) do
+  def confirm_delete(conn, %{"comment_id" => comment_id}) do
     actor = conn.assigns[:legacy_user] || Users.current_user(conn)
-    fallback_path = "/post/view/#{parse_image_id(image_id)}"
+
+    case Comments.deletion_target(comment_id, actor) do
+      {:ok, target} ->
+        conn
+        |> assign(:page_title, "Delete Comment")
+        |> assign(:has_left_nav, false)
+        |> render(:confirm_delete, target: target)
+
+      {:error, reason} ->
+        deletion_error(conn, reason)
+    end
+  end
+
+  def delete(conn, %{"comment_id" => comment_id}) do
+    actor = conn.assigns[:legacy_user] || Users.current_user(conn)
 
     case Comments.delete(comment_id, actor) do
       {:ok, deleted_image_id} ->
-        target = safe_referer_or(conn, "/post/view/#{deleted_image_id}")
-        redirect(conn, to: target)
+        redirect(conn, to: "/post/view/#{deleted_image_id}")
 
-      {:error, :permission_denied} ->
-        send_resp(conn, 403, "Permission Denied")
-
-      {:error, :comment_not_found} ->
-        send_resp(conn, 404, "Not Found")
-
-      {:error, :invalid_image_id} ->
-        send_resp(conn, 400, "Bad Request")
-
-      {:error, _} ->
-        redirect(conn, to: fallback_path)
+      {:error, reason} ->
+        deletion_error(conn, reason)
     end
   end
+
+  defp deletion_error(conn, :permission_denied), do: send_resp(conn, 403, "Permission Denied")
+  defp deletion_error(conn, :comment_not_found), do: send_resp(conn, 404, "Not Found")
+  defp deletion_error(conn, :invalid_image_id), do: send_resp(conn, 400, "Bad Request")
+  defp deletion_error(conn, _), do: send_resp(conn, 500, "Comment deletion failed")
 
   defp error_message(:empty_comment), do: "Comments need text..."
   defp error_message(:comment_too_long), do: "Comment too long~"
@@ -84,27 +95,6 @@ defmodule ShimmiePhoenixWeb.CommentController do
     case Integer.parse(to_string(raw || "")) do
       {id, ""} when id > 0 -> id
       _ -> 1
-    end
-  end
-
-  defp safe_referer_or(conn, fallback) do
-    referer = get_req_header(conn, "referer") |> List.first()
-
-    case URI.parse(referer || "") do
-      %URI{scheme: nil, host: nil, path: path, query: query}
-      when is_binary(path) and path != "" ->
-        if String.starts_with?(path, "/") do
-          if is_binary(query) and query != "", do: path <> "?" <> query, else: path
-        else
-          fallback
-        end
-
-      %URI{host: host, path: path, query: query}
-      when is_binary(host) and host == conn.host and is_binary(path) and path != "" ->
-        if is_binary(query) and query != "", do: path <> "?" <> query, else: path
-
-      _ ->
-        fallback
     end
   end
 end

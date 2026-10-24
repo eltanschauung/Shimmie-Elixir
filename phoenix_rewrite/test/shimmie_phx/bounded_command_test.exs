@@ -17,6 +17,18 @@ defmodule ShimmiePhoenix.BoundedCommandTest do
     Enum.each(tasks, &Task.await(&1, 5000))
   end
 
+  test "the kernel enforces a per-download byte cap even without Content-Length" do
+    path = Path.join(System.tmp_dir!(), "bounded_output_#{System.unique_integer([:positive])}")
+    on_exit(fn -> File.rm(path) end)
+
+    assert {:error, _} =
+             BoundedCommand.run("dd", ["if=/dev/zero", "of=" <> path, "bs=2048", "count=1"],
+               max_file_size: 1000
+             )
+
+    assert File.stat!(path).size <= 1000
+  end
+
   test "a dead request owner cancels the external job and releases its worker" do
     owner = spawn(fn -> BoundedCommand.run("sleep", ["20"], timeout: 25_000) end)
     wait_until(fn -> length(Task.Supervisor.children(ShimmiePhoenix.ExternalSupervisor)) == 1 end)

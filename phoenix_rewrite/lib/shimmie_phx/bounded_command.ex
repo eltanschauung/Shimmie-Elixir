@@ -6,9 +6,19 @@ defmodule ShimmiePhoenix.BoundedCommand do
     owner = self()
     reference = make_ref()
     timeout = min(max(Keyword.get(opts, :timeout, 30_000), 1), 30_000)
+    file_limit = min(max(Keyword.get(opts, :max_file_size, 67_108_864), 1), 67_108_864)
 
     case Task.Supervisor.start_child(@supervisor, fn ->
-           result = execute(command, args, owner, timeout, Keyword.get(opts, :max_output, 65_536))
+           result =
+             execute(
+               command,
+               args,
+               owner,
+               timeout,
+               Keyword.get(opts, :max_output, 65_536),
+               file_limit
+             )
+
            send(owner, {reference, result})
          end) do
       {:ok, pid} ->
@@ -33,7 +43,7 @@ defmodule ShimmiePhoenix.BoundedCommand do
     end
   end
 
-  defp execute(command, args, owner, timeout, output_limit) do
+  defp execute(command, args, owner, timeout, output_limit, file_limit) do
     monitor = Process.monitor(owner)
     executable = System.find_executable(command)
     timer = System.find_executable("timeout")
@@ -47,7 +57,7 @@ defmodule ShimmiePhoenix.BoundedCommand do
         limits,
         "--as=335544320",
         "--cpu=25",
-        "--fsize=67108864",
+        "--fsize=#{file_limit}",
         "--nofile=128",
         "--",
         executable | args

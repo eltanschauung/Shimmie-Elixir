@@ -9,6 +9,7 @@ defmodule ShimmiePhoenix.Site.Users do
   alias ShimmiePhoenix.Site
   alias ShimmiePhoenix.Site.Store
   alias ShimmiePhoenix.Repo
+  alias ShimmiePhoenix.{AuthThrottle, PasswordPolicy}
 
   @username_regex ~r/^[a-zA-Z0-9\-_]+$/
   @sqlite_separator <<31>>
@@ -118,11 +119,24 @@ defmodule ShimmiePhoenix.Site.Users do
   def get_user_by_name(_), do: nil
 
   def login(name, pass, remote_ip) when is_binary(name) and is_binary(pass) do
+    with true <- byte_size(name) <= 256 and byte_size(pass) <= 4096,
+         :ok <- AuthThrottle.check(:login, remote_ip, name) do
+      authenticate(name, pass, remote_ip)
+    else
+      false -> {:error, :invalid_credentials}
+      error -> error
+    end
+  end
+
+  def login(_, _, _), do: {:error, :invalid_credentials}
+
+  defp authenticate(name, pass, remote_ip) do
     backend = active_backend()
 
     case user_by_name(String.trim(name)) ||
            user_by_name(String.replace(String.trim(name), " ", "_")) do
       nil ->
+        Bcrypt.no_user_verify()
         Logger.warning("auth.login failure backend=#{backend}")
 
         {:error, :invalid_credentials}
@@ -131,7 +145,9 @@ defmodule ShimmiePhoenix.Site.Users do
         if valid_password?(user, pass) do
           Logger.info("auth.login success backend=#{backend}")
 
-          {:ok, user, session_id(user, remote_ip)}
+          with {:ok, user} <- upgrade_legacy_password(user, pass) do
+            {:ok, user, session_id(user, remote_ip)}
+          end
         else
           Logger.warning("auth.login failure backend=#{backend}")
 
@@ -149,12 +165,13 @@ defmodule ShimmiePhoenix.Site.Users do
     login? = Map.get(opts, :login, true)
 
     with :ok <- validate_username(name),
+         :ok <- AuthThrottle.check(:signup, remote_ip, name),
          :ok <- ensure_username_available(name),
          :ok <- validate_passwords(pass1, pass2),
          :ok <- validate_email_requirement(email) do
       class_name =
         Map.get(opts, :class) ||
-          if(MapSet.member?(columns, "class"), do: first_user_class(), else: nil)
+          if(MapSet.member?(columns, "class"), do: "user", else: nil)
 
       base_cols = []
       base_vals = []
@@ -362,21 +379,7 @@ defmodule ShimmiePhoenix.Site.Users do
     }
   end
 
-  def recover(username) do
-    case user_by_name(username) do
-      nil ->
-        {:error, :user_not_found}
-
-      %{email: nil} ->
-        {:error, :no_email}
-
-      %{email: ""} ->
-        {:error, :no_email}
-
-      _ ->
-        {:error, :not_implemented}
-    end
-  end
+  def recover(_username), do: {:error, :recovery_unavailable}
 
   def change_name(actor, params) do
     with {:ok, user_id} <- parse_user_id(params["id"]),
@@ -402,6 +405,7 @@ defmodule ShimmiePhoenix.Site.Users do
     with {:ok, user_id} <- parse_user_id(params["id"]),
          user when not is_nil(user) <- user_by_id(user_id),
          :ok <- ensure_can_edit(actor, user),
+         :ok <- AuthThrottle.check(:password_change, remote_ip, user.id),
          :ok <- validate_passwords(Map.get(params, "pass1", ""), Map.get(params, "pass2", "")),
          true <- MapSet.member?(user_columns(), "pass"),
          {:ok, _} <-
@@ -741,19 +745,6 @@ defmodule ShimmiePhoenix.Site.Users do
           _ ->
             ["admin", "anonymous", "base", "user"]
         end
-    end
-  end
-
-  defp first_user_class do
-    if use_sqlite?() do
-      if sqlite_count("SELECT COUNT(*) FROM users WHERE class = 'admin'") == 0,
-        do: "admin",
-        else: "user"
-    else
-      case Repo.query("SELECT COUNT(*) FROM users WHERE class = 'admin'", []) do
-        {:ok, %{rows: [[0]]}} -> "admin"
-        _ -> "user"
-      end
     end
   end
 
@@ -1105,7 +1096,7 @@ defmodule ShimmiePhoenix.Site.Users do
       name == "" ->
         {:error, :invalid_username}
 
-      String.length(name) < 1 ->
+      byte_size(name) > 256 ->
         {:error, :invalid_username}
 
       Regex.match?(@username_regex, name) ->
@@ -1116,13 +1107,7 @@ defmodule ShimmiePhoenix.Site.Users do
     end
   end
 
-  defp validate_passwords(pass1, pass2) do
-    cond do
-      pass1 != pass2 -> {:error, :password_mismatch}
-      String.length(to_string(pass1)) < 1 -> {:error, :invalid_password}
-      true -> :ok
-    end
-  end
+  defp validate_passwords(pass1, pass2), do: PasswordPolicy.validate(pass1, pass2)
 
   defp validate_email_requirement(email) do
     if user_email_required?() and email == "" do
@@ -1176,7 +1161,7 @@ defmodule ShimmiePhoenix.Site.Users do
       passhash == "" ->
         false
 
-      passhash == legacy_md5 ->
+      Plug.Crypto.secure_compare(passhash, legacy_md5) ->
         true
 
       String.starts_with?(passhash, "$2") ->
@@ -1185,9 +1170,40 @@ defmodule ShimmiePhoenix.Site.Users do
       true ->
         false
     end
+  rescue
+    _ -> false
   end
 
   defp valid_password?(_, _), do: false
+
+  defp upgrade_legacy_password(%{passhash: "$2" <> _} = user, _pass), do: {:ok, user}
+
+  defp upgrade_legacy_password(_user, pass) when byte_size(pass) > 72,
+    do: {:error, :password_upgrade_required}
+
+  defp upgrade_legacy_password(user, pass) do
+    hash = Bcrypt.hash_pwd_salt(pass)
+
+    result =
+      if use_sqlite?() do
+        sqlite_exec(
+          "UPDATE users SET pass=#{sqlite_literal(hash)} WHERE id=#{user.id} AND pass=#{sqlite_literal(user.passhash)}"
+        )
+      else
+        Repo.query("UPDATE users SET pass=$1 WHERE id=$2 AND pass=$3", [
+          hash,
+          user.id,
+          user.passhash
+        ])
+      end
+
+    with {:ok, _} <- result,
+         %{passhash: ^hash} = refreshed <- user_by_id(user.id) do
+      {:ok, refreshed}
+    else
+      _ -> {:error, :invalid_credentials}
+    end
+  end
 
   defp normalize_bcrypt_hash("$2y$" <> rest), do: "$2b$" <> rest
   defp normalize_bcrypt_hash(value), do: value

@@ -9,6 +9,7 @@ defmodule ShimmiePhoenix.Application do
   def start(_type, _args) do
     children = [
       ShimmiePhoenix.Cache,
+      ShimmiePhoenix.AuthThrottle,
       {Task.Supervisor, name: ShimmiePhoenix.NotificationSupervisor, max_children: 16},
       ShimmiePhoenixWeb.Telemetry,
       ShimmiePhoenix.Repo,

@@ -1054,6 +1054,12 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
         |> put_auth_cookies(logged_user.name, session_token)
         |> redirect(to: login_redirect_target(conn))
 
+      {:error, :throttled} ->
+        conn |> put_resp_header("retry-after", "60") |> send_resp(429, "Too many attempts. Try again later.")
+
+      {:error, :password_upgrade_required} ->
+        send_resp(conn, 403, "This legacy password requires an administrator-assisted password reset.")
+
       {:error, :invalid_credentials} ->
         redirect(conn,
           to: "/user_admin/login?error=" <> URI.encode_www_form("Invalid username or password")
@@ -1065,29 +1071,8 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     do:
       redirect(conn, to: "/user_admin/login?error=" <> URI.encode_www_form("Missing credentials"))
 
-  def recover(conn, %{"username" => username}) do
-    case Users.recover(username) do
-      {:error, :no_email} ->
-        redirect(conn,
-          to:
-            "/user_admin/login?error=" <>
-              URI.encode_www_form("That user has no registered email address")
-        )
-
-      {:error, :not_implemented} ->
-        redirect(conn,
-          to:
-            "/user_admin/login?error=" <>
-              URI.encode_www_form("Email sending is not implemented yet")
-        )
-
-      _ ->
-        redirect(conn, to: "/user_admin/login?error=" <> URI.encode_www_form("No such user"))
-    end
-  end
-
   def recover(conn, _params),
-    do: redirect(conn, to: "/user_admin/login?error=" <> URI.encode_www_form("Missing username"))
+    do: send_resp(conn, 503, "Account recovery is unavailable. Contact an administrator.")
 
   def create(conn, params) do
     if Users.signup_enabled?() do
@@ -3192,7 +3177,8 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
   defp error_message(:invalid_username), do: "Invalid username"
   defp error_message(:username_taken), do: "That username is already taken"
   defp error_message(:password_mismatch), do: "Passwords do not match"
-  defp error_message(:invalid_password), do: "Password cannot be empty"
+  defp error_message(:invalid_password), do: "Password must be at least 12 characters and at most 72 bytes"
+  defp error_message(:throttled), do: "Too many attempts. Try again later."
   defp error_message(:email_required), do: "Email address is required"
   defp error_message(:invalid_email), do: "Invalid email address"
   defp error_message(:not_logged_in), do: "You are not logged in"

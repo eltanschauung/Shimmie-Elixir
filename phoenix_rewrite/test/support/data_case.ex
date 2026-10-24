@@ -36,7 +36,11 @@ defmodule ShimmiePhoenix.DataCase do
   Sets up the sandbox based on the test tags.
   """
   def setup_sandbox(tags) do
-    unless tags[:async], do: ShimmiePhoenix.Cache.clear()
+    unless tags[:async] do
+      ShimmiePhoenix.Cache.clear()
+      ShimmiePhoenix.AuthThrottle.reset()
+    end
+
     pid = Ecto.Adapters.SQL.Sandbox.start_owner!(ShimmiePhoenix.Repo, shared: not tags[:async])
     on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
   end

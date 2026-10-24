@@ -340,7 +340,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
     assert redirected_to(get(conn, "/user_admin"), 302) == "/user_admin/login"
     assert html_response(get(conn, "/user_admin/create"), 200) =~ "Signup"
     assert response(get(conn, "/user_admin/list"), 403) =~ "Permission Denied"
-    assert redirected_to(get(conn, "/user_admin/logout"), 302) == "/post/list"
+    assert html_response(get(conn, "/user_admin/logout"), 200) =~ "Log Out"
   end
 
   test "account subnavbar shows logged-in account links and no duplicate logout button", %{
@@ -376,14 +376,14 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
       |> sign_in(20)
       |> post("/user_admin/change_pass", %{
         "user_id" => "20",
-        "pass1" => "new_secret",
-        "pass2" => "new_secret"
+        "pass1" => "new_secret_password",
+        "pass2" => "new_secret_password"
       })
 
     assert redirected_to(conn, 302) == "/user?notice=Password+changed"
 
     assert {:ok, _user, _token} =
-             ShimmiePhoenix.Site.Users.login("tester", "new_secret", "127.0.0.1")
+             ShimmiePhoenix.Site.Users.login("tester", "new_secret_password", "127.0.0.1")
   end
 
   test "user admin login post accepts valid credentials", %{conn: conn} do
@@ -400,8 +400,8 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
     conn =
       post(conn, "/user_admin/create", %{
         "name" => "new_user",
-        "pass1" => "abc123",
-        "pass2" => "abc123",
+        "pass1" => "new_account_password",
+        "pass2" => "new_account_password",
         "email" => "new_user@example.com"
       })
 

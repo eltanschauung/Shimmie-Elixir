@@ -24,6 +24,8 @@ Uploads require ImageMagick, curl, GNU coreutils and util-linux (`timeout`, `prl
 URL import settings other than `none` use the same public-address-only, DNS-pinned
 curl transport: HTTP(S), ports 80/443, no redirects or proxies. Uploaded images must
 decode successfully; workers, execution time, output, pixels and memory are bounded.
+There are two job slots, a 320 MiB address-space limit per tool and a 20-megapixel
+decoded-image limit, sized to leave headroom in a 1 GiB application sandbox.
 The configured upload limit is additionally capped at 64 MiB. ASX playlists are
 not accepted as media. Failed writes remove only newly published files, never
 pre-existing files. Interrupted publications retain a private manifest under
@@ -78,6 +80,20 @@ Then verify:
 3. Keep `compat_health_enabled` disabled in production builds.
 4. Set `SECRET_KEY_BASE` from `mix phx.gen.secret`.
 5. Serve over HTTPS so auth cookies are always marked `Secure`.
+6. Production binds to loopback by default; set `SHIMMIE_BIND_IP` explicitly only
+   on a suitably isolated container/backend network. Preserve a tested manifest
+   of any deployment-specific security overlay rather than overwriting it.
+7. Provision the database separately. The runtime role does not need `CREATEDB`,
+   superuser, role-management or replication privileges; schema ownership and a
+   dedicated migration role should be planned separately for imported databases.
+
+## Verification
+
+Run `mix test`, `mix format --check-formatted` on changed Elixir/HEEx files,
+`node --test test/js/*.cjs`, `mix hex.audit`, and `mix deps.get --check-locked`.
+Use a disposable database and media root, never production. Coverage is a separate
+assurance metric (`mix test --cover`); a passing test suite is not a claim that
+the existing 90% coverage gate or a complete browser/security audit has passed.
 
 ## Parity Tracking
 Run:

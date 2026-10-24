@@ -16,13 +16,13 @@ defmodule ShimmiePhoenix.MediaValidation do
   @limits [
     "-limit",
     "memory",
-    "256MiB",
+    "64MiB",
     "-limit",
     "map",
-    "512MiB",
+    "128MiB",
     "-limit",
     "disk",
-    "64MiB",
+    "32MiB",
     "-limit",
     "thread",
     "1",
@@ -57,7 +57,7 @@ defmodule ShimmiePhoenix.MediaValidation do
          [w, h] <- String.split(String.trim(dimensions)),
          {width, ""} <- Integer.parse(w),
          {height, ""} <- Integer.parse(h),
-         true <- width > 0 and height > 0 and width * height <= 50_000_000,
+         true <- width > 0 and height > 0 and width * height <= 20_000_000,
          {:ok, _} <-
            BoundedCommand.run(
              convert,

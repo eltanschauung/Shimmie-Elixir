@@ -45,7 +45,7 @@ defmodule ShimmiePhoenix.BoundedCommand do
         "--kill-after=1s",
         "#{timeout / 1000}s",
         limits,
-        "--as=1073741824",
+        "--as=335544320",
         "--cpu=25",
         "--fsize=67108864",
         "--nofile=128",

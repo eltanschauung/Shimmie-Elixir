@@ -15,6 +15,25 @@ Before the first migration, set `SHIMMIE_BOOTSTRAP_ADMIN_PASSWORD` to a unique
 optionally changes the initial name from `admin`. There is no default password;
 upgrades never reset an existing administrator.
 
+New passwords require 12+ characters (maximum 72 UTF-8 bytes). Successful legacy
+MD5 logins are upgraded to bcrypt; legacy passwords over 72 bytes require an
+administrator-assisted reset. Recovery is explicitly unavailable until mail
+recovery is implemented. Authentication attempts have bounded IP/account/global budgets.
+
+Uploads require ImageMagick, curl, GNU coreutils and util-linux (`timeout`, `prlimit`).
+URL import settings other than `none` use the same public-address-only, DNS-pinned
+curl transport: HTTP(S), ports 80/443, no redirects or proxies. Uploaded images must
+decode successfully; workers, execution time, output, pixels and memory are bounded.
+The configured upload limit is additionally capped at 64 MiB. ASX playlists are
+not accepted as media. Failed writes remove only newly published files, never
+pre-existing files. Interrupted publications retain a private manifest under
+`data/.upload-staging/` for operator reconciliation; do not blindly purge orphans.
+
+Back up the database and stop old application writers before the forward-only ID
+allocation migration. It adds/advances owned sequences above existing IDs without
+rewriting rows, and widens legacy password columns for bcrypt. Do not roll back to
+MAX+1 writers. Existing media, credentials and instance configuration are preserved.
+
 ## Current Baseline
 - Phoenix app listens on `0.0.0.0:4001` in development.
 - Compatibility health endpoint: `GET /__compat/health` (enabled in `dev` and `test`; disabled by default in production)

@@ -10,8 +10,8 @@ defmodule ShimmiePhoenix.Site.Upload do
   alias ShimmiePhoenix.Site.Store
   alias ShimmiePhoenix.Site.TagRules
   alias ShimmiePhoenix.SourceURL
+  alias ShimmiePhoenix.{SafeFetch, WorkGate}
 
-  @image_exts ~w(jpg jpeg png gif webp avif)
   @allowed_upload_exts MapSet.new(~w(
                          jpg
                          jpeg
@@ -67,6 +67,32 @@ defmodule ShimmiePhoenix.Site.Upload do
         common_source,
         row_source
       ) do
+    if can_upload?(actor) do
+      WorkGate.run(fn ->
+        do_create_file_upload(
+          upload,
+          actor,
+          remote_ip,
+          common_tags,
+          specific_tags,
+          common_source,
+          row_source
+        )
+      end)
+    else
+      {:error, :permission_denied}
+    end
+  end
+
+  defp do_create_file_upload(
+         upload,
+         actor,
+         remote_ip,
+         common_tags,
+         specific_tags,
+         common_source,
+         row_source
+       ) do
     max_size =
       parse_size(
         Store.get_config("upload_size", Integer.to_string(10 * 1024 * 1024)),
@@ -83,10 +109,8 @@ defmodule ShimmiePhoenix.Site.Upload do
           {:error, :too_large}
 
         true ->
-          case File.read(upload.path) do
-            {:ok, bytes} ->
-              hash = :crypto.hash(:md5, bytes) |> Base.encode16(case: :lower)
-
+          case file_hash(upload.path) do
+            {:ok, hash} ->
               if post_id_by_hash(hash) do
                 {:error, :duplicate}
               else
@@ -95,7 +119,6 @@ defmodule ShimmiePhoenix.Site.Upload do
                 if allowed_upload_ext?(ext) do
                   filename = sanitize_filename(upload.filename, ext)
                   mime = choose_mime(ext)
-                  width_height = media_dimensions(upload.path, ext)
                   source = source || ""
                   tags = normalized_tags(common_tags, specific_tags)
                   now = NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
@@ -104,52 +127,57 @@ defmodule ShimmiePhoenix.Site.Upload do
                   approved = upload_starts_approved?(actor)
                   approved_by_id = if approved, do: owner_id, else: nil
 
-                  Repo.transaction(fn ->
-                    image_id = next_id("images")
-                    media_path = warehouse_path("images", hash)
-                    thumb_path = warehouse_path("thumbs", hash)
+                  stage_upload(upload, ext, hash, fn stage ->
+                    Repo.transaction(fn ->
+                      Repo.query!("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [hash])
+                      if post_id_by_hash(hash), do: Repo.rollback(:duplicate)
+                      image_id = next_id("images")
+                      media_path = warehouse_path("images", hash)
+                      thumb_path = warehouse_path("thumbs", hash)
+                      {width, height} = stage.dimensions
 
-                    :ok = File.mkdir_p(Path.dirname(media_path))
-                    :ok = File.mkdir_p(Path.dirname(thumb_path))
-                    :ok = File.cp(upload.path, media_path)
-                    _ = ensure_thumb(media_path, thumb_path, ext)
+                      insert_image!(
+                        image_id,
+                        owner_id,
+                        owner_ip,
+                        filename,
+                        stat.size,
+                        hash,
+                        ext,
+                        source,
+                        width,
+                        height,
+                        now,
+                        approved,
+                        approved_by_id,
+                        mime
+                      )
 
-                    {width, height} = width_height
+                      Enum.each(tags, fn tag ->
+                        tag_id = upsert_tag!(tag)
 
-                    insert_image!(
-                      image_id,
-                      owner_id,
-                      owner_ip,
-                      filename,
-                      stat.size,
-                      hash,
-                      ext,
-                      source,
-                      width,
-                      height,
-                      now,
-                      approved,
-                      approved_by_id,
-                      mime
-                    )
+                        _ =
+                          Repo.query!(
+                            "INSERT INTO image_tags(image_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                            [image_id, tag_id]
+                          )
+                      end)
 
-                    Enum.each(tags, fn tag ->
-                      tag_id = upsert_tag!(tag)
+                      maybe_insert_tag_history(image_id, owner_id, owner_ip, tags, now)
+                      maybe_insert_source_history(image_id, owner_id, owner_ip, source, now)
 
-                      _ =
-                        Repo.query!(
-                          "INSERT INTO image_tags(image_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-                          [image_id, tag_id]
-                        )
+                      publish!(stage.source, media_path, stage.key)
+
+                      if File.exists?(stage.thumb),
+                        do: publish!(stage.thumb, thumb_path, stage.key)
+
+                      image_id
                     end)
-
-                    maybe_insert_tag_history(image_id, owner_id, owner_ip, tags, now)
-                    maybe_insert_source_history(image_id, owner_id, owner_ip, source, now)
-
-                    image_id
                   end)
                   |> case do
                     {:ok, image_id} -> {:ok, image_id}
+                    {:error, :duplicate} -> {:error, :duplicate}
+                    {:error, :invalid_upload} -> {:error, :invalid_upload}
                     {:error, _} -> {:error, :db_failed}
                   end
                 else
@@ -173,6 +201,32 @@ defmodule ShimmiePhoenix.Site.Upload do
         common_source,
         row_source
       ) do
+    if can_upload?(actor) do
+      WorkGate.run(fn ->
+        do_create_url_upload(
+          url,
+          actor,
+          remote_ip,
+          common_tags,
+          specific_tags,
+          common_source,
+          row_source
+        )
+      end)
+    else
+      {:error, :permission_denied}
+    end
+  end
+
+  defp do_create_url_upload(
+         url,
+         actor,
+         remote_ip,
+         common_tags,
+         specific_tags,
+         common_source,
+         row_source
+       ) do
     max_size =
       parse_size(
         Store.get_config("upload_size", Integer.to_string(10 * 1024 * 1024)),
@@ -189,7 +243,7 @@ defmodule ShimmiePhoenix.Site.Upload do
           content_type: content_type
         }
 
-        create_file_upload(
+        do_create_file_upload(
           upload,
           actor,
           remote_ip,
@@ -200,6 +254,7 @@ defmodule ShimmiePhoenix.Site.Upload do
         )
       after
         _ = File.rm(tmp_path)
+        _ = File.rmdir(Path.dirname(tmp_path))
       end
     end
   end
@@ -236,168 +291,105 @@ defmodule ShimmiePhoenix.Site.Upload do
   defp normalize_class(class), do: class |> to_string() |> String.trim() |> String.downcase()
 
   defp normalize_remote_url(url) do
-    value = url |> to_string() |> String.trim()
-
-    case URI.parse(value) do
-      %URI{scheme: scheme} = uri when scheme in ["http", "https"] ->
-        {:ok, URI.to_string(uri)}
-
-      _ ->
-        {:error, :invalid_url}
+    case SourceURL.href(url) do
+      nil -> {:error, :invalid_url}
+      value -> {:ok, value}
     end
   end
 
   defp fetch_remote_upload(url, max_size) do
-    case transload_engine() do
-      "wget" -> fetch_with_wget(url, max_size)
-      "curl" -> fetch_with_curl(url, max_size)
-      _ -> fetch_with_httpc(url, max_size)
+    directory = temp_directory!()
+    path = Path.join(directory, "download")
+
+    case SafeFetch.fetch(url, path, min(max_size, 64 * 1024 * 1024)) do
+      :ok ->
+        name =
+          url |> URI.parse() |> Map.get(:path) |> to_string() |> Path.basename() |> URI.decode()
+
+        {:ok, path, name, "application/octet-stream"}
+
+      error ->
+        File.rm_rf(directory)
+        error
     end
   end
 
-  defp fetch_with_wget(url, max_size) do
-    tmp_path = tmp_transload_path()
-
-    case System.cmd("wget", ["-q", "-O", tmp_path, "--", url], stderr_to_stdout: true) do
-      {_out, 0} ->
-        finalize_remote_file(tmp_path, url, max_size, nil)
-
-      _ ->
-        _ = File.rm(tmp_path)
-        {:error, :transload_failed}
-    end
+  defp temp_directory! do
+    root = Path.join([Site.legacy_root(), "data", ".upload-staging"])
+    File.mkdir_p!(root)
+    File.chmod!(root, 0o700)
+    directory = Path.join(root, Base.url_encode64(:crypto.strong_rand_bytes(24), padding: false))
+    File.mkdir!(directory)
+    File.chmod!(directory, 0o700)
+    directory
   end
 
-  defp fetch_with_curl(url, max_size) do
-    tmp_path = tmp_transload_path()
+  defp file_hash(path) do
+    hash =
+      path
+      |> File.stream!(65_536)
+      |> Enum.reduce(:crypto.hash_init(:md5), &:crypto.hash_update(&2, &1))
+      |> :crypto.hash_final()
 
-    args = [
-      "-L",
-      "--fail",
-      "--silent",
-      "--show-error",
-      "--max-filesize",
-      Integer.to_string(max_size),
-      "-o",
-      tmp_path,
-      url
-    ]
-
-    case System.cmd("curl", args, stderr_to_stdout: true) do
-      {_out, 0} ->
-        finalize_remote_file(tmp_path, url, max_size, nil)
-
-      _ ->
-        _ = File.rm(tmp_path)
-        {:error, :transload_failed}
-    end
+    {:ok, Base.encode16(hash, case: :lower)}
+  rescue
+    _ -> {:error, :invalid_upload}
   end
 
-  defp fetch_with_httpc(url, max_size) do
-    ensure_http_started()
-    request = {String.to_charlist(url), []}
-    options = [timeout: 30_000, connect_timeout: 10_000, autoredirect: true]
+  defp stage_upload(upload, ext, hash, fun) do
+    directory = temp_directory!()
+    key = make_ref()
+    source = Path.join(directory, "source")
+    thumb = Path.join(directory, "thumb")
+    Process.put(key, [])
 
-    case :httpc.request(:get, request, options, body_format: :binary) do
-      {:ok, {{_version, status, _reason}, headers, body}} when status in 200..299 ->
-        tmp_path = tmp_transload_path()
+    try do
+      File.cp!(upload.path, source)
 
-        case File.write(tmp_path, body, [:binary]) do
-          :ok ->
-            content_type = header_value(headers, "content-type") || "application/octet-stream"
-            finalize_remote_file(tmp_path, url, max_size, {headers, content_type})
+      with {:ok, dimensions} <- ShimmiePhoenix.MediaValidation.prepare(source, ext, thumb) do
+        # A durable manifest makes the unavoidable filesystem/SQL crash window
+        # inspectable. Never delete historical orphan files automatically.
+        File.write!(
+          Path.join(directory, "publication.json"),
+          Jason.encode!(%{
+            hash: hash,
+            destinations: [warehouse_path("images", hash), warehouse_path("thumbs", hash)]
+          }),
+          [:sync]
+        )
 
-          _ ->
-            _ = File.rm(tmp_path)
-            {:error, :invalid_upload}
+        result = fun.(%{source: source, thumb: thumb, dimensions: dimensions, key: key})
+
+        case result do
+          {:ok, _} -> Process.put(key, [])
+          _ -> cleanup_created(key)
         end
 
-      _ ->
-        {:error, :transload_failed}
-    end
-  end
-
-  defp finalize_remote_file(tmp_path, url, max_size, header_meta) do
-    case File.stat(tmp_path) do
-      {:ok, stat} when stat.size > 0 and stat.size <= max_size ->
-        {filename, content_type} =
-          case header_meta do
-            {headers, ctype} -> {suggested_filename(url, headers), ctype}
-            _ -> {suggested_filename(url, []), "application/octet-stream"}
-          end
-
-        {:ok, tmp_path, filename, content_type}
-
-      {:ok, stat} when stat.size > max_size ->
-        _ = File.rm(tmp_path)
-        {:error, :too_large}
-
-      _ ->
-        _ = File.rm(tmp_path)
-        {:error, :invalid_upload}
-    end
-  end
-
-  defp tmp_transload_path do
-    Path.join(System.tmp_dir!(), "shimmie_transload_#{System.unique_integer([:positive])}.bin")
-  end
-
-  defp ensure_http_started do
-    _ = Application.ensure_all_started(:inets)
-    _ = Application.ensure_all_started(:ssl)
-    :ok
-  end
-
-  defp suggested_filename(url, headers) do
-    from_header = content_disposition_filename(headers)
-
-    from_url =
-      case URI.parse(url) do
-        %URI{path: path} when is_binary(path) and path != "" ->
-          path
-          |> Path.basename()
-          |> URI.decode()
-          |> String.trim()
-
-        _ ->
-          ""
+        result
       end
-
-    case first_non_blank([from_header, from_url]) do
-      "" -> "transload.bin"
-      name -> Path.basename(name)
-    end
-  end
-
-  defp content_disposition_filename(headers) do
-    case header_value(headers, "content-disposition") do
-      nil ->
-        nil
-
-      value ->
-        case Regex.run(~r/filename\*?=(?:UTF-8''|\"?)([^\";]+)/i, value) do
-          [_, filename] -> filename |> String.trim() |> URI.decode()
-          _ -> nil
-        end
-    end
-  end
-
-  defp header_value(headers, wanted) when is_list(headers) do
-    wanted_down = String.downcase(wanted)
-
-    Enum.find_value(headers, fn
-      {key, value} ->
-        key_s = key |> to_string() |> String.downcase()
-
-        if key_s == wanted_down do
-          value |> to_string() |> String.trim()
-        else
-          nil
-        end
-
+    rescue
       _ ->
-        nil
-    end)
+        cleanup_created(key)
+        {:error, :db_failed}
+    after
+      if Process.get(key, []) == [], do: File.rm_rf(directory)
+      Process.delete(key)
+    end
+  end
+
+  defp publish!(source, destination, key) do
+    File.mkdir_p!(Path.dirname(destination))
+    # Same-filesystem, exclusive hard link: no overwrite/adoption of another
+    # attempt's files, including unreferenced legacy files.
+    File.ln!(source, destination)
+    Process.put(key, [destination | Process.get(key, [])])
+  end
+
+  defp cleanup_created(key) do
+    remaining =
+      Enum.reject(Process.get(key, []), fn path -> File.rm(path) in [:ok, {:error, :enoent}] end)
+
+    Process.put(key, remaining)
   end
 
   defp actor_id(%{id: id}) when is_integer(id) and id > 0, do: id
@@ -461,70 +453,6 @@ defmodule ShimmiePhoenix.Site.Upload do
       end
 
     Path.join([Site.legacy_root(), "data", kind] ++ subdirs ++ [hash])
-  end
-
-  defp media_dimensions(path, ext) do
-    if ext in @image_exts do
-      identify =
-        Store.get_config("media_convert_path", "convert")
-        |> to_string()
-        |> String.replace("convert", "identify")
-
-      case System.cmd(identify, ["-format", "%w %h", path], stderr_to_stdout: true) do
-        {out, 0} ->
-          case String.split(String.trim(out), " ", parts: 2) do
-            [w, h] -> {parse_int(w, 0), parse_int(h, 0)}
-            _ -> {0, 0}
-          end
-
-        _ ->
-          {0, 0}
-      end
-    else
-      {0, 0}
-    end
-  end
-
-  defp ensure_thumb(media_path, thumb_path, ext) do
-    if ext in @image_exts do
-      convert = Store.get_config("media_convert_path", "convert") |> to_string() |> String.trim()
-      w = parse_int(Store.get_config("thumb_width", "192"), 192)
-      h = parse_int(Store.get_config("thumb_height", "192"), 192)
-      alpha_bg = thumb_alpha_color()
-      tmp = thumb_path <> ".tmp." <> Integer.to_string(System.unique_integer([:positive]))
-
-      case System.cmd(
-             convert,
-             [
-               media_path <> "[0]",
-               "-auto-orient",
-               "-thumbnail",
-               "#{w}x#{h}>",
-               "-background",
-               alpha_bg,
-               "-alpha",
-               "remove",
-               "-alpha",
-               "off",
-               "-strip",
-               "-quality",
-               "90",
-               "JPEG:" <> tmp
-             ],
-             stderr_to_stdout: true
-           ) do
-        {_out, 0} ->
-          File.rename(tmp, thumb_path)
-          :ok
-
-        _ ->
-          _ = File.rm(tmp)
-          File.cp(media_path, thumb_path)
-          :ok
-      end
-    else
-      :ok
-    end
   end
 
   defp insert_image!(
@@ -660,7 +588,7 @@ defmodule ShimmiePhoenix.Site.Upload do
         case Float.parse(number) do
           {n, ""} ->
             parsed = trunc(n * multiplier)
-            if(parsed > 0, do: parsed, else: default)
+            if(parsed > 0, do: min(parsed, 64 * 1024 * 1024), else: default)
 
           _ ->
             default
@@ -668,16 +596,6 @@ defmodule ShimmiePhoenix.Site.Upload do
 
       _ ->
         default
-    end
-  end
-
-  defp thumb_alpha_color do
-    raw = Store.get_config("thumb_alpha_color", "#ffffff") |> to_string() |> String.trim()
-
-    cond do
-      Regex.match?(~r/^#[0-9a-fA-F]{6}$/, raw) -> raw
-      Regex.match?(~r/^[0-9a-fA-F]{6}$/, raw) -> "#" <> raw
-      true -> "#ffffff"
     end
   end
 end

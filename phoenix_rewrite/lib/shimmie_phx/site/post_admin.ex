@@ -407,54 +407,21 @@ defmodule ShimmiePhoenix.Site.PostAdmin do
   end
 
   defp regenerate_thumb_file(post, image_path) do
-    thumb_path = Posts.thumb_path(post)
-    thumb_dir = Path.dirname(thumb_path)
-    _ = File.mkdir_p(thumb_dir)
-
-    tmp_path = thumb_path <> ".tmp." <> Integer.to_string(System.unique_integer([:positive]))
-    convert = Store.get_config("media_convert_path", "convert") |> to_string() |> String.trim()
-    width = config_int("thumb_width", 192)
-    height = config_int("thumb_height", 192)
-    alpha_bg = thumb_alpha_color()
-
-    args = [
-      image_path <> "[0]",
-      "-auto-orient",
-      "-thumbnail",
-      "#{width}x#{height}>",
-      "-background",
-      alpha_bg,
-      "-alpha",
-      "remove",
-      "-alpha",
-      "off",
-      "-strip",
-      "-quality",
-      "90",
-      "JPEG:" <> tmp_path
-    ]
-
-    result =
+    ShimmiePhoenix.WorkGate.run(fn ->
+      thumb_path = Posts.thumb_path(post)
+      File.mkdir_p!(Path.dirname(thumb_path))
+      temporary = thumb_path <> ".tmp." <> Base.url_encode64(:crypto.strong_rand_bytes(18), padding: false)
       try do
-        case System.cmd(convert, args, stderr_to_stdout: true) do
-          {_output, 0} -> :ok
-          {output, _} -> {:error, {:convert_failed, String.trim(output)}}
+        with {:ok, _dimensions} <- ShimmiePhoenix.MediaValidation.prepare(image_path, post.ext, temporary),
+             :ok <- File.rename(temporary, thumb_path) do
+          :ok
+        else
+          _ -> {:error, :thumb_failed}
         end
-      rescue
-        _ -> {:error, :convert_missing}
+      after
+        File.rm(temporary)
       end
-
-    case result do
-      :ok ->
-        case File.rename(tmp_path, thumb_path) do
-          :ok -> :ok
-          _ -> {:error, :thumb_write_failed}
-        end
-
-      {:error, _} = error ->
-        _ = safe_rm(tmp_path)
-        error
-    end
+    end)
   end
 
   defp delete_post_rows(image_id) do
@@ -730,23 +697,6 @@ defmodule ShimmiePhoenix.Site.PostAdmin do
     case Site.sqlite_db_path() do
       nil -> nil
       path -> if File.exists?(path), do: path, else: nil
-    end
-  end
-
-  defp config_int(name, default) do
-    case Store.get_config(name, Integer.to_string(default)) |> to_string() |> Integer.parse() do
-      {value, ""} when value > 0 -> value
-      _ -> default
-    end
-  end
-
-  defp thumb_alpha_color do
-    raw = Store.get_config("thumb_alpha_color", "#ffffff") |> to_string() |> String.trim()
-
-    cond do
-      Regex.match?(~r/^#[0-9a-fA-F]{6}$/, raw) -> raw
-      Regex.match?(~r/^[0-9a-fA-F]{6}$/, raw) -> "#" <> raw
-      true -> "#ffffff"
     end
   end
 

@@ -80,6 +80,7 @@ defmodule ShimmiePhoenixWeb.PostController do
             |> assign(:page_title, "#{Appearance.site_title()} - ")
             |> assign(:has_left_nav, true)
             |> assign(:include_notes_assets, true)
+            |> assign(:include_comment_reply_assets, true)
             |> assign(:include_view_assets, true)
             |> assign(:meta_keywords, Enum.join(post.tags || [], ", "))
             |> assign(:meta_og_title, Enum.join(post.tags || [], ", "))

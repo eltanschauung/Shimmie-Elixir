@@ -1,5 +1,6 @@
 defmodule ShimmiePhoenixWeb.PostControllerTest do
   use ShimmiePhoenixWeb.ConnCase, async: false
+  require Phoenix.LiveViewTest
 
   alias ShimmiePhoenix.SiteSchemaHelper
   alias ShimmiePhoenix.Repo
@@ -94,6 +95,32 @@ defmodule ShimmiePhoenixWeb.PostControllerTest do
     assert body =~ "640x480"
     assert body =~ "Favorited By:"
     assert body =~ "alice"
+    assert body =~ "/ext/comment/replies.js?v=1"
+    refute body =~ "javascript: replyTo("
+
+    assert [{"a", attributes, _}] =
+             body |> Floki.parse_document!() |> Floki.find("a[data-comment-reply]")
+
+    assert {"href", "/post/view/101#comment_on_101"} in attributes
+    assert {"data-username", "alice"} in attributes
+  end
+
+  test "reply links keep legacy usernames in escaped data attributes" do
+    username = ~s(legacy\" onclick=\"window.replyAuditMarker=1)
+
+    body =
+      Phoenix.LiveViewTest.render_component(&ShimmiePhoenixWeb.CommentHTML.reply_link/1,
+        image_id: 101,
+        comment_id: 901,
+        username: username
+      )
+
+    assert [{"a", attributes, _}] =
+             body |> Floki.parse_document!() |> Floki.find("a[data-comment-reply]")
+
+    assert {"data-username", username} in attributes
+    refute List.keymember?(attributes, "onclick", 0)
+    refute body =~ "javascript:"
   end
 
   test "post details hide unapproved posts from guests and unrelated users", %{conn: conn} do

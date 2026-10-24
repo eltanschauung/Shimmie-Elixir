@@ -20,6 +20,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
   alias ShimmiePhoenix.Repo
 
   def comment_list(conn, params) do
+    conn = assign(conn, :include_comment_reply_assets, true)
     page = parse_page(params["page_num"])
     per_page = 10
     {threads, total_count} = Pages.list_comment_threads(page, per_page)

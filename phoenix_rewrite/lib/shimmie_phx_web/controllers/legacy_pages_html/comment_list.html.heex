@@ -45,20 +45,28 @@
                         <%= comment.owner_name %>
                       </a>
                       <%= if @can_view_comment_ips and to_string(comment.owner_ip || "") != "" do %>
-                        (<%= comment.owner_ip %><%= if @can_ban_comment_ips do %>, <a href={
+                        (<%= comment.owner_ip %>
+                        <%= if @can_ban_comment_ips do %>
+                          ,
+                          <a href={
                             "/ip_ban/list?c_ip=#{URI.encode_www_form(comment.owner_ip)}" <>
                               "&c_reason=#{URI.encode_www_form("Comment posted #{comment.posted}")}" <>
                               "&c_expires=#{URI.encode_www_form("+1 week")}#create"
-                          }>Ban</a><% end %>)
+                          }>
+                            Ban
+                          </a>
+                        <% end %>)
                       <% end %>
                       <br />
                       <time datetime={comment.posted}>
                         <%= format_post_date(comment.posted) %>
                       </time>
                       -
-                      <a href={"javascript: replyTo(#{thread.post.id}, #{comment.id}, \"#{comment.owner_name}\")"}>
-                        Reply
-                      </a>
+                      <ShimmiePhoenixWeb.CommentHTML.reply_link
+                        image_id={thread.post.id}
+                        comment_id={comment.id}
+                        username={comment.owner_name}
+                      />
                       <%= if @can_delete_comments do %>
                         -
                         <a

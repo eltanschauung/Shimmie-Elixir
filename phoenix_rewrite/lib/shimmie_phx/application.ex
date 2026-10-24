@@ -10,6 +10,8 @@ defmodule ShimmiePhoenix.Application do
     children = [
       ShimmiePhoenix.Cache,
       ShimmiePhoenix.AuthThrottle,
+      ShimmiePhoenix.WorkGate,
+      {Task.Supervisor, name: ShimmiePhoenix.ExternalSupervisor, max_children: 2},
       {Task.Supervisor, name: ShimmiePhoenix.NotificationSupervisor, max_children: 16},
       ShimmiePhoenixWeb.Telemetry,
       ShimmiePhoenix.Repo,

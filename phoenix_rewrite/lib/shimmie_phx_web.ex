@@ -43,7 +43,7 @@ defmodule ShimmiePhoenixWeb do
         layouts: [html: ShimmiePhoenixWeb.Layouts]
 
       import Plug.Conn
-      import ShimmiePhoenixWeb.Gettext
+      use Gettext, backend: ShimmiePhoenixWeb.Gettext
 
       unquote(verified_routes())
     end
@@ -85,7 +85,7 @@ defmodule ShimmiePhoenixWeb do
       import Phoenix.HTML
       # Core UI components and translation
       import ShimmiePhoenixWeb.CoreComponents
-      import ShimmiePhoenixWeb.Gettext
+      use Gettext, backend: ShimmiePhoenixWeb.Gettext
 
       # Shortcut for generating JS commands
       alias Phoenix.LiveView.JS

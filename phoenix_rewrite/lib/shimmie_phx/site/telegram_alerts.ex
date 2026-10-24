@@ -111,8 +111,8 @@ defmodule ShimmiePhoenix.Site.TelegramAlerts do
 
     request = {
       String.to_charlist(url),
-      [{'content-type', 'application/x-www-form-urlencoded'}],
-      'application/x-www-form-urlencoded',
+      [{~c"content-type", ~c"application/x-www-form-urlencoded"}],
+      ~c"application/x-www-form-urlencoded",
       String.to_charlist(encoded)
     }
 
@@ -151,7 +151,7 @@ defmodule ShimmiePhoenix.Site.TelegramAlerts do
     base = [
       verify: :verify_peer,
       cacerts: ca_certs(),
-      server_name_indication: 'api.telegram.org',
+      server_name_indication: ~c"api.telegram.org",
       depth: 3
     ]
 

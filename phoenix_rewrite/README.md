@@ -2,6 +2,9 @@
 
 Compatibility-first rewrite of Shimmie2 with the target of full feature parity.
 
+Requires Elixir 1.16+ and a compatible Erlang/OTP release. Dependency and asset
+tool versions are pinned in `mix.exs`, `mix.lock`, and `config/config.exs`.
+
 ## Current Baseline
 - Phoenix app listens on `0.0.0.0:4001` in development.
 - Compatibility health endpoint: `GET /__compat/health` (enabled in `dev` and `test`; disabled by default in production)

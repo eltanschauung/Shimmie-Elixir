@@ -1,8 +1,9 @@
 <!doctype html>
 <html class="no-js" lang="en">
   <head>
-    <title><%= assigns[:page_title] || ShimmiePhoenix.Site.Appearance.site_title() %></title>
+    <title>{assigns[:page_title] || ShimmiePhoenix.Site.Appearance.site_title()}</title>
     <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+    <meta name="csrf-token" content={Plug.CSRFProtection.get_csrf_token()} />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script type="text/javascript">
       (function () {
@@ -178,14 +179,14 @@
       <script defer src="/ext/view/script.js?v=20260303f" type="text/javascript">
       </script>
     <% end %>
-    <%= Phoenix.HTML.raw(ShimmiePhoenix.Site.Appearance.custom_html_headers()) %>
+    {Phoenix.HTML.raw(ShimmiePhoenix.Site.Appearance.custom_html_headers())}
   </head>
   <body class={body_layout_class(assigns)}>
     <%= if @legacy_chrome && @legacy_chrome.show? do %>
       <% header_brand = ShimmiePhoenix.Site.Appearance.header_branding(@legacy_chrome.site_title) %>
       <header>
         <h1 id="site-title">
-          <a href="/" style={header_brand.link_style}><%= header_brand.title %></a>
+          <a href="/" style={header_brand.link_style}>{header_brand.title}</a>
           <%= if header_brand.badge_src do %>
             <img
               id={header_brand.badge_id}
@@ -199,7 +200,7 @@
           <%= for link <- @legacy_chrome.nav_links do %>
             <li>
               <a class={if link.active?, do: "current-page", else: "tab"} href={link.href}>
-                <%= link.label %>
+                {link.label}
               </a>
             </li>
           <% end %>
@@ -209,7 +210,7 @@
             <%= for link <- @legacy_chrome.sub_links do %>
               <li>
                 <a class={if link.active?, do: "current-page", else: "tab"} href={link.href}>
-                  <%= link.label %>
+                  {link.label}
                 </a>
               </li>
             <% end %>
@@ -227,7 +228,7 @@
       <div id="blotter2" class="shm-blotter2">
         <ul>
           <%= for [_, entry_date, entry_text, _important] <- @legacy_chrome.blotter_entries do %>
-            <li><%= format_blotter_date(entry_date) %> - <%= entry_text %></li>
+            <li>{format_blotter_date(entry_date)} - {entry_text}</li>
           <% end %>
         </ul>
       </div>
@@ -255,18 +256,18 @@
         <section id="IP_Ban_Noticemain">
           <h3 data-toggle-sel="#IP_Ban_Noticemain" class="">Notice</h3>
           <div class="blockbody">
-            <%= Phoenix.HTML.raw(notice_html) %>
+            {Phoenix.HTML.raw(notice_html)}
           </div>
         </section>
       </article>
     <% end %>
 
-    <%= @inner_content %>
+    {@inner_content}
 
     <%= if @legacy_chrome && @legacy_chrome.show? do %>
       <footer>
         <div>
-          Serving <%= @legacy_chrome.post_count || 0 %> posts |
+          Serving {@legacy_chrome.post_count || 0} posts |
           <%= if @legacy_chrome.contact_href do %>
             <a href={@legacy_chrome.contact_href}>Contact</a>
           <% else %>

@@ -61,6 +61,21 @@ defmodule ShimmiePhoenix.Site.Index do
   end
 
   def list_posts(search, page, page_size, opts \\ []) do
+    if valid_search?(search, page, page_size) do
+      do_list_posts(search, page, min(page_size, 200), opts)
+    else
+      {[], 0}
+    end
+  end
+
+  defp valid_search?(search, page, size) do
+    (is_nil(search) or
+       (is_binary(search) and byte_size(search) <= 4096 and String.valid?(search) and
+          length(String.split(search, ~r/\s+/, trim: true)) <= 50)) and
+      is_integer(page) and page in 1..10_000 and is_integer(size) and size > 0
+  end
+
+  defp do_list_posts(search, page, page_size, opts) do
     current_user = normalize_user(opts)
     terms = parse_terms(search)
     offset = max(page - 1, 0) * page_size
@@ -274,7 +289,7 @@ defmodule ShimmiePhoenix.Site.Index do
     search
     |> String.trim()
     |> String.split(~r/\s+/, trim: true)
-    |> Enum.map(&TagRules.resolve_search_term/1)
+    |> TagRules.resolve_search_terms()
   end
 
   defp repo_conditions(terms, current_user) do

@@ -23,7 +23,14 @@ defmodule ShimmiePhoenix.Site.TagRules do
     |> normalize_and_expand()
   end
 
-  def resolve_search_term(term) when is_binary(term) do
+  def resolve_search_terms(terms) when is_list(terms) do
+    aliases = if terms == [], do: %{}, else: alias_map()
+    Enum.map(terms, &resolve_search_term(&1, aliases))
+  end
+
+  def resolve_search_term(term), do: resolve_search_term(term, alias_map())
+
+  defp resolve_search_term(term, aliases) when is_binary(term) do
     value = String.trim(term)
 
     {negative, body} =
@@ -44,11 +51,11 @@ defmodule ShimmiePhoenix.Site.TagRules do
         value
 
       true ->
-        negative <> resolve_alias(String.downcase(body), alias_map())
+        negative <> resolve_alias(String.downcase(body), aliases)
     end
   end
 
-  def resolve_search_term(term), do: to_string(term || "")
+  defp resolve_search_term(term, _aliases), do: to_string(term || "")
 
   def autocomplete(search, limit \\ 100)
 
@@ -335,7 +342,15 @@ defmodule ShimmiePhoenix.Site.TagRules do
   end
 
   defp sqlite_rows(path, query) do
-    args = ["-noheader", "-separator", @sqlite_separator, "-newline", @sqlite_row_separator, path, query]
+    args = [
+      "-noheader",
+      "-separator",
+      @sqlite_separator,
+      "-newline",
+      @sqlite_row_separator,
+      path,
+      query
+    ]
 
     case System.cmd("sqlite3", args, stderr_to_stdout: true) do
       {output, 0} ->

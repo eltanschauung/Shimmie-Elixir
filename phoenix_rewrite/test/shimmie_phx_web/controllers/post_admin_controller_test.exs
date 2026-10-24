@@ -71,6 +71,45 @@ defmodule ShimmiePhoenixWeb.PostAdminControllerTest do
     :ok
   end
 
+  test "notes and requests cannot mutate another account's invisible post", %{conn: conn} do
+    Repo.query!("UPDATE images SET approved = FALSE, owner_id = 1 WHERE id = 501")
+    actor = %{id: 2, class: "user"}
+
+    attrs = %{
+      "note_x1" => "0",
+      "note_y1" => "0",
+      "note_width" => "2",
+      "note_height" => "2",
+      "note_text" => "text"
+    }
+
+    assert {:error, :post_not_found} = ShimmiePhoenix.Site.PostAdmin.add_note(501, actor, attrs)
+
+    assert {:error, :post_not_found} =
+             ShimmiePhoenix.Site.PostAdmin.edit_note(501, 1, actor, attrs)
+
+    assert {:error, :post_not_found} = ShimmiePhoenix.Site.PostAdmin.add_note_request(501, actor)
+
+    for class <- ["banned", "ghost", "anonymous"] do
+      assert {:error, :permission_denied} =
+               ShimmiePhoenix.Site.PostAdmin.add_note_request(501, %{id: 2, class: class})
+    end
+
+    for route <- ["/note/add_note", "/note/add_request", "/note/edit_note"] do
+      result =
+        conn
+        |> init_test_session(%{site_user_id: 2})
+        |> post(route, Map.merge(attrs, %{"image_id" => "501", "note_id" => "1"}))
+
+      assert response(result, 404) == "Not Found"
+    end
+
+    assert Repo.query!("SELECT COUNT(*) FROM note_request WHERE image_id = 501").rows == [[0]]
+    assert :ok = ShimmiePhoenix.Site.PostAdmin.add_note_request(501, %{id: 1, class: "admin"})
+    Repo.query!("UPDATE images SET owner_id = 2 WHERE id = 501")
+    assert :ok = ShimmiePhoenix.Site.PostAdmin.add_note_request(501, actor)
+  end
+
   test "admin post/view includes full post controls parity block", %{conn: conn} do
     conn = conn |> init_test_session(%{site_user_id: 1}) |> get("/post/view/501")
     body = html_response(conn, 200)

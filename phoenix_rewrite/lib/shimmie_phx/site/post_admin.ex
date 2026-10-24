@@ -5,6 +5,7 @@ defmodule ShimmiePhoenix.Site.PostAdmin do
 
   alias ShimmiePhoenix.Site
   alias ShimmiePhoenix.Site.Posts
+  alias ShimmiePhoenix.Site.PostPolicy
   alias ShimmiePhoenix.Site.Store
   alias ShimmiePhoenix.Repo
 
@@ -12,18 +13,14 @@ defmodule ShimmiePhoenix.Site.PostAdmin do
 
   @sqlite_separator <<31>>
 
-  def admin?(%{class: class}) do
-    class
-    |> to_string()
-    |> String.trim()
-    |> String.downcase()
-    |> Kernel.==("admin")
+  def admin?(%{class: class} = actor) do
+    PostPolicy.active_account?(actor) and
+      String.downcase(String.trim(to_string(class))) == "admin"
   end
 
   def admin?(_), do: false
 
-  def logged_in?(%{id: id}) when is_integer(id) and id > 0, do: true
-  def logged_in?(_), do: false
+  def logged_in?(actor), do: PostPolicy.active_account?(actor)
 
   def feature(image_id, actor) do
     with :ok <- require_admin(actor),
@@ -69,8 +66,7 @@ defmodule ShimmiePhoenix.Site.PostAdmin do
   end
 
   def add_note_request(image_id, actor) do
-    with :ok <- require_logged_in(actor),
-         post when not is_nil(post) <- Posts.get_post(image_id),
+    with {:ok, post} <- PostPolicy.writable_post(image_id, actor),
          true <- table_exists?("note_request"),
          :ok <- insert_note_request(post.id, actor.id) do
       :ok
@@ -83,8 +79,7 @@ defmodule ShimmiePhoenix.Site.PostAdmin do
   end
 
   def add_note(image_id, actor, attrs) do
-    with :ok <- require_logged_in(actor),
-         post when not is_nil(post) <- Posts.get_post(image_id),
+    with {:ok, post} <- PostPolicy.writable_post(image_id, actor),
          true <- table_exists?("notes"),
          schema <- note_schema(),
          {:ok, note} <- normalize_note(attrs),
@@ -100,8 +95,7 @@ defmodule ShimmiePhoenix.Site.PostAdmin do
   end
 
   def edit_note(image_id, note_id, actor, attrs) do
-    with :ok <- require_logged_in(actor),
-         post when not is_nil(post) <- Posts.get_post(image_id),
+    with {:ok, post} <- PostPolicy.writable_post(image_id, actor),
          true <- table_exists?("notes"),
          schema <- note_schema(),
          {:ok, note} <- normalize_note(attrs),
@@ -757,9 +751,6 @@ defmodule ShimmiePhoenix.Site.PostAdmin do
   end
 
   defp require_admin(actor), do: if(admin?(actor), do: :ok, else: {:error, :permission_denied})
-
-  defp require_logged_in(actor),
-    do: if(logged_in?(actor), do: :ok, else: {:error, :permission_denied})
 
   defp safe_rm(path) when is_binary(path) do
     if File.exists?(path), do: File.rm(path), else: :ok

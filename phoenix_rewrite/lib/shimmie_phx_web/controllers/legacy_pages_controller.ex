@@ -1182,6 +1182,14 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     end
   end
 
+  def confirm_logout(conn, _params) do
+    conn
+    |> assign(:page_title, "Log Out")
+    |> assign(:has_left_nav, false)
+    |> put_resp_header("cache-control", "private, no-store")
+    |> render(:confirm_logout)
+  end
+
   def logout(conn, _params) do
     conn
     |> configure_session(drop: true)

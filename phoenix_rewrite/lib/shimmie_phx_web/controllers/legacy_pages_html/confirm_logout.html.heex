@@ -1,0 +1,13 @@
+<article class="full">
+  <section>
+    <h3>Log Out</h3>
+    <div class="blockbody">
+      <p>Log out of this browser?</p>
+      <form action="/user_admin/logout" method="POST">
+        <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
+        <button type="submit">Log Out</button>
+        <a href="/post/list">Cancel</a>
+      </form>
+    </div>
+  </section>
+</article>

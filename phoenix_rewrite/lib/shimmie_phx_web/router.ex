@@ -101,7 +101,7 @@ defmodule ShimmiePhoenixWeb.Router do
     get "/user_admin/login", LegacyPagesController, :login
     get "/user_admin/create", LegacyPagesController, :create
     get "/user_admin/list", LegacyPagesController, :user_list
-    get "/user_admin/logout", LegacyPagesController, :logout
+    get "/user_admin/logout", LegacyPagesController, :confirm_logout
     get "/wiki", LegacyPagesController, :wiki_root
     get "/wiki/:title/:action", LegacyPagesController, :wiki_action
     get "/wiki/:title", LegacyPagesController, :wiki_show
@@ -155,6 +155,7 @@ defmodule ShimmiePhoenixWeb.Router do
     post "/alias/add", LegacyPagesController, :alias_add
     post "/alias/remove", LegacyPagesController, :alias_remove
     post "/user_admin/login", LegacyPagesController, :login_post
+    post "/user_admin/logout", LegacyPagesController, :logout
     post "/user_admin/recover", LegacyPagesController, :recover
     post "/user_admin/create", LegacyPagesController, :create_post
     post "/user_admin/create_other", LegacyPagesController, :create_other

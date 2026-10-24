@@ -209,9 +209,26 @@
           <div class="sbar">
             <%= for link <- @legacy_chrome.sub_links do %>
               <li>
-                <a class={if link.active?, do: "current-page", else: "tab"} href={link.href}>
-                  {link.label}
-                </a>
+                <%= if Map.get(link, :method, :get) == :post do %>
+                  <form action={link.href} method="POST" style="display:inline;margin:0;">
+                    <input
+                      type="hidden"
+                      name="_csrf_token"
+                      value={Plug.CSRFProtection.get_csrf_token()}
+                    />
+                    <button
+                      type="submit"
+                      class={if link.active?, do: "current-page", else: "tab"}
+                      style="background:none;border:none;padding:0;margin:0;cursor:pointer;font:inherit;"
+                    >
+                      {link.label}
+                    </button>
+                  </form>
+                <% else %>
+                  <a class={if link.active?, do: "current-page", else: "tab"} href={link.href}>
+                    {link.label}
+                  </a>
+                <% end %>
               </li>
             <% end %>
           </div>

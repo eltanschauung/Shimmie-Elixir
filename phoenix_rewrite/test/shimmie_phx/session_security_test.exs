@@ -12,6 +12,38 @@ defmodule ShimmiePhoenix.SessionSecurityTest do
     %{user: Users.get_user_by_id(2)}
   end
 
+  test "logout GET is non-mutating and POST requires a real CSRF token", %{conn: conn} do
+    confirmation = conn |> sign_in(2) |> get("/user_admin/logout")
+    body = html_response(confirmation, 200)
+    assert Users.current_user(confirmation).id == 2
+    refute confirmation.private[:plug_session_info] == :drop
+
+    for params <- [%{}, %{"_csrf_token" => "invalid"}] do
+      assert_raise Plug.CSRFProtection.InvalidCSRFTokenError, fn ->
+        conn
+        |> sign_in(2)
+        |> put_private(:plug_skip_csrf_protection, false)
+        |> post("/user_admin/logout", params)
+      end
+    end
+
+    token =
+      body
+      |> Floki.parse_document!()
+      |> Floki.find("form[action='/user_admin/logout'] input[name='_csrf_token']")
+      |> Floki.attribute("value")
+      |> List.last()
+
+    result =
+      confirmation
+      |> recycle()
+      |> put_private(:plug_skip_csrf_protection, false)
+      |> post("/user_admin/logout", %{"_csrf_token" => token})
+
+    assert redirected_to(result) == "/post/list"
+    assert result.private[:plug_session_info] == :drop
+  end
+
   test "bare pre-upgrade signed account IDs are not authentication", %{conn: conn} do
     assert Users.current_user(init_test_session(conn, %{site_user_id: 2})) == nil
     assert Users.session_user_id(init_test_session(conn, %{legacy_user_id: 2})) == nil

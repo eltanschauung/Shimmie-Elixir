@@ -184,7 +184,7 @@ defmodule ShimmiePhoenixWeb.Plugs.LegacyChrome do
           pm_label,
           String.starts_with?(path, "/user") or String.starts_with?(path, "/pm")
         ),
-        nav("/user_admin/logout", "Log Out", false)
+        nav("/user_admin/logout", "Log Out", false) |> Map.put(:method, :post)
       ]
     else
       []

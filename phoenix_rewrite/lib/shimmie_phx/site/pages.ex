@@ -4,6 +4,7 @@ defmodule ShimmiePhoenix.Site.Pages do
   """
 
   alias ShimmiePhoenix.Site
+  alias ShimmiePhoenix.Site.Approval
   alias ShimmiePhoenix.Site.Posts
   alias ShimmiePhoenix.Site.Store
   alias ShimmiePhoenix.Site.TagRules
@@ -40,11 +41,16 @@ defmodule ShimmiePhoenix.Site.Pages do
     end
   end
 
-  def list_comment_threads(page, per_page) do
-    offset = max(page - 1, 0) * per_page
-    ids = list_comment_thread_ids(per_page, offset)
+  def list_comment_threads(page, per_page, actor \\ nil) do
+    visibility = comment_visibility(actor)
+    total_count = count_comment_threads(visibility)
+    per_page = max(per_page, 1)
+    total_pages = max(1, div(total_count + per_page - 1, per_page))
+    offset = (page |> max(1) |> min(total_pages)) - 1
+    offset = offset * per_page
+    ids = list_comment_thread_ids(per_page, offset, visibility)
     threads = ids |> Enum.map(&comment_thread/1) |> Enum.reject(&is_nil/1)
-    {threads, count_comment_threads()}
+    {threads, total_count}
   end
 
   def tags_map_data(starts_with \\ nil) do
@@ -197,7 +203,9 @@ defmodule ShimmiePhoenix.Site.Pages do
   end
 
   def add_blotter_entry(entry_text, important \\ false)
-  def add_blotter_entry(entry_text, important) when is_binary(entry_text) and is_boolean(important) do
+
+  def add_blotter_entry(entry_text, important)
+      when is_binary(entry_text) and is_boolean(important) do
     entry_text = String.trim(entry_text)
 
     cond do
@@ -799,21 +807,36 @@ defmodule ShimmiePhoenix.Site.Pages do
     end)
   end
 
-  defp list_comment_thread_ids(limit, offset) do
+  defp comment_visibility(actor) do
+    cond do
+      not Approval.approval_supported?() or Approval.can_approve?(actor) ->
+        {"", %{}}
+
+      match?(%{id: id} when is_integer(id) and id > 0, actor) ->
+        {"WHERE (COALESCE(i.approved, TRUE) = TRUE OR i.owner_id = :viewer_id) ",
+         %{viewer_id: actor.id}}
+
+      true ->
+        {"WHERE COALESCE(i.approved, TRUE) = TRUE ", %{}}
+    end
+  end
+
+  defp list_comment_thread_ids(limit, offset, {where, params}) do
     rows =
       query_rows_typed(
-        "SELECT image_id FROM comments GROUP BY image_id " <>
-          "ORDER BY MAX(posted) DESC LIMIT :limit OFFSET :offset",
-        %{limit: limit, offset: offset}
+        "SELECT c.image_id FROM comments c JOIN images i ON i.id = c.image_id " <>
+          where <> "GROUP BY c.image_id ORDER BY MAX(c.posted) DESC LIMIT :limit OFFSET :offset",
+        Map.merge(params, %{limit: limit, offset: offset})
       )
 
     Enum.map(rows, fn [image_id] -> parse_int(image_id) end)
   end
 
-  defp count_comment_threads do
+  defp count_comment_threads({where, params}) do
     case query_rows_typed(
-           "SELECT COUNT(*) FROM (SELECT image_id FROM comments GROUP BY image_id) AS t",
-           %{}
+           "SELECT COUNT(DISTINCT c.image_id) FROM comments c JOIN images i ON i.id = c.image_id " <>
+             where,
+           params
          ) do
       [[count]] -> parse_int(count)
       _ -> 0
@@ -1408,7 +1431,11 @@ defmodule ShimmiePhoenix.Site.Pages do
   end
 
   defp native_extension_row(key, enabled) do
-    details = Map.get(native_extension_catalog(), key, %{name: humanize_extension_key(key), description: ""})
+    details =
+      Map.get(native_extension_catalog(), key, %{
+        name: humanize_extension_key(key),
+        description: ""
+      })
 
     %{
       key: key,

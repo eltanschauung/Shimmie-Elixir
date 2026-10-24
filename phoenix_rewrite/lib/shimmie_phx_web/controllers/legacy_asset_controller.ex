@@ -27,11 +27,11 @@ defmodule ShimmiePhoenixWeb.LegacyAssetController do
                         ".yaml"
                       ])
 
-  def data(conn, %{"path" => ["images", _prefix, hash]}),
-    do: MediaController.legacy_image(conn, %{"hash" => hash})
+  def data(conn, %{"path" => ["images" | parts]}) when parts != [],
+    do: MediaController.legacy_image(conn, %{"hash" => List.last(parts)})
 
-  def data(conn, %{"path" => ["thumbs", _prefix, hash]}),
-    do: MediaController.legacy_thumb(conn, %{"hash" => hash})
+  def data(conn, %{"path" => ["thumbs" | parts]}) when parts != [],
+    do: MediaController.legacy_thumb(conn, %{"hash" => List.last(parts)})
 
   def data(conn, %{"path" => path_parts}), do: serve(conn, ["data" | path_parts])
   def ext(conn, %{"path" => path_parts}), do: serve(conn, ["ext" | path_parts])

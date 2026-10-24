@@ -23,10 +23,11 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     conn = assign(conn, :include_comment_reply_assets, true)
     page = parse_page(params["page_num"])
     per_page = 10
-    {threads, total_count} = Pages.list_comment_threads(page, per_page)
+    current_user = conn.assigns[:legacy_user] || Users.current_user(conn)
+    {threads, total_count} = Pages.list_comment_threads(page, per_page, current_user)
+    conn = if current_user, do: put_resp_header(conn, "cache-control", "private, no-store"), else: conn
     total_pages = max(1, div(total_count + per_page - 1, per_page))
     current_page = min(page, total_pages)
-    current_user = conn.assigns[:legacy_user] || Users.current_user(conn)
     remote_ip = Users.remote_ip_string(conn)
     can_create_comments = Comments.can_create_comment?(current_user)
     comment_captcha? = String.upcase(to_string(Store.get_config("comment_captcha", "N"))) == "Y"

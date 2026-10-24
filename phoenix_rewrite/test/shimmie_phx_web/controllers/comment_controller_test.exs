@@ -117,6 +117,24 @@ defmodule ShimmiePhoenixWeb.CommentControllerTest do
     assert Comments.can_create_comment?(%{id: 3, class: "admin"})
   end
 
+  test "comments cannot be submitted to another user's unapproved post" do
+    Repo.query!("ALTER TABLE images ADD COLUMN IF NOT EXISTS approved BOOLEAN")
+    Repo.query!("INSERT INTO users(id, name, class) VALUES (5, 'owner', 'user')")
+    Repo.query!("UPDATE images SET approved = FALSE, owner_id = 5 WHERE id = 101")
+
+    params = %{
+      "image_id" => "101",
+      "comment" => "private comment",
+      "hash" => Comments.form_hash("127.0.0.1")
+    }
+
+    for actor <- [nil, %{id: 2, class: "user"}] do
+      assert {:error, :post_not_found} = Comments.add(params, actor, "127.0.0.1")
+    end
+
+    assert {:ok, 101} = Comments.add(params, %{id: 5, class: "user"}, "127.0.0.1")
+  end
+
   test "POST /comment/add rejects empty comment", %{conn: conn} do
     conn =
       conn

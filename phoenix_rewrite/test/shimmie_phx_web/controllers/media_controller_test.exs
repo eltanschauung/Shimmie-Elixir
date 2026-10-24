@@ -80,6 +80,28 @@ defmodule ShimmiePhoenixWeb.MediaControllerTest do
     assert get_resp_header(conn, "content-type") |> List.first() =~ "image/jpeg"
   end
 
+  test "legacy media routes preserve zero and multiple warehouse splits", %{
+    conn: conn,
+    legacy_root: root
+  } do
+    hash = "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+    for splits <- [0, 2] do
+      config = Path.join(root, "warehouse_#{splits}.php")
+      File.write!(config, "<?php define('WH_SPLITS', #{splits});")
+      Application.put_env(:shimmie_phx, :legacy_config_path, config)
+      prefixes = if splits == 0, do: [], else: ["ab", "bb"]
+
+      for warehouse <- ["images", "thumbs"] do
+        parts = ["data", warehouse] ++ prefixes ++ [hash]
+        path = Path.join([root | parts])
+        File.mkdir_p!(Path.dirname(path))
+        File.write!(path, "LAYOUT-#{splits}")
+        assert response(get(conn, "/" <> Enum.join(parts, "/")), 200) == "LAYOUT-#{splits}"
+      end
+    end
+  end
+
   test "thumbnail filename cannot select another post's unapproved file", %{
     conn: conn,
     legacy_root: root

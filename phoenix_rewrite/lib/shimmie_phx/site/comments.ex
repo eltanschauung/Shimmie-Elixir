@@ -4,6 +4,7 @@ defmodule ShimmiePhoenix.Site.Comments do
   """
 
   alias ShimmiePhoenix.Site
+  alias ShimmiePhoenix.Site.Approval
   alias ShimmiePhoenix.Site.Permissions
   alias ShimmiePhoenix.Site.Store
   alias ShimmiePhoenix.Site.TagEdit
@@ -50,7 +51,7 @@ defmodule ShimmiePhoenix.Site.Comments do
     with true <- can_create_comment?(actor),
          {:ok, image_id} <- parse_image_id(Map.get(params, "image_id")),
          {:ok, comment} <- normalize_comment(Map.get(params, "comment")),
-         :ok <- ensure_image_exists(image_id, backend),
+         :ok <- ensure_image_visible(image_id, actor),
          :ok <- verify_anonymous_form_hash(actor, params["hash"], remote_ip),
          :ok <- verify_anonymous_comment_checks(actor, image_id, comment, remote_ip, backend),
          {:ok, _comment_id} <-
@@ -170,28 +171,9 @@ defmodule ShimmiePhoenix.Site.Comments do
 
   defp ensure_not_rate_limited(_remote_ip, _backend), do: :ok
 
-  defp ensure_image_exists(image_id, :repo) do
-    exists? =
-      case Repo.query("SELECT 1 FROM images WHERE id = $1 LIMIT 1", [image_id]) do
-        {:ok, %{rows: [[1]]}} -> true
-        {:ok, %{rows: rows}} -> rows != []
-        _ -> false
-      end
-
-    if exists?, do: :ok, else: {:error, :post_not_found}
+  defp ensure_image_visible(image_id, actor) do
+    if Approval.can_view_image?(image_id, actor), do: :ok, else: {:error, :post_not_found}
   end
-
-  defp ensure_image_exists(image_id, {:sqlite, path}) do
-    exists? =
-      case sqlite_single(path, "SELECT 1 FROM images WHERE id = #{image_id} LIMIT 1") do
-        "1" -> true
-        _ -> false
-      end
-
-    if exists?, do: :ok, else: {:error, :post_not_found}
-  end
-
-  defp ensure_image_exists(_image_id, _backend), do: {:error, :post_not_found}
 
   defp comment_image_id(comment_id, :repo) do
     case Repo.query("SELECT image_id FROM comments WHERE id = $1 LIMIT 1", [comment_id]) do

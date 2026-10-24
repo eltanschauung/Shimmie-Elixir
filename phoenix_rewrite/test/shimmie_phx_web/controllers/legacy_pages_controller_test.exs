@@ -244,6 +244,35 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
     assert body =~ "src=\"/thumb/200/thumb\""
   end
 
+  test "comment list and its pagination only expose posts visible to the viewer", %{conn: conn} do
+    Repo.query!("ALTER TABLE images ADD COLUMN IF NOT EXISTS approved BOOLEAN")
+
+    Repo.query!(
+      "INSERT INTO images(id, owner_id, filename, filesize, hash, ext, width, height, approved) VALUES (201, 20, 'private.png', 1, 'ccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'png', 1, 1, FALSE)"
+    )
+
+    Repo.query!(
+      "INSERT INTO comments(id, image_id, owner_id, posted, comment) VALUES (2, 201, 20, NOW(), 'private-comment-marker')"
+    )
+
+    body = html_response(get(conn, "/comment/list"), 200)
+    refute body =~ "private-comment-marker"
+    {[thread], total} = ShimmiePhoenix.Site.Pages.list_comment_threads(1, 1)
+    assert thread.post.id == 200
+    assert total == 1
+    {[last_thread], 1} = ShimmiePhoenix.Site.Pages.list_comment_threads(999, 1)
+    assert last_thread.post.id == 200
+    owner = conn |> init_test_session(%{site_user_id: 20}) |> get("/comment/list")
+    assert html_response(owner, 200) =~ "private-comment-marker"
+    assert get_resp_header(owner, "cache-control") == ["private, no-store"]
+
+    {[_thread], 2} =
+      ShimmiePhoenix.Site.Pages.list_comment_threads(1, 1, %{id: 20, class: "user"})
+
+    admin = conn |> init_test_session(%{site_user_id: 30}) |> get("/comment/list")
+    assert html_response(admin, 200) =~ "private-comment-marker"
+  end
+
   test "comment list falls back to add-comment link for anonymous when captcha is enabled", %{
     conn: conn
   } do

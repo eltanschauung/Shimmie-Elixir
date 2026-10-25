@@ -1,20 +1,24 @@
 defmodule ShimmiePhoenix.Site.PrivateMessages do
-  @moduledoc """
-  Legacy-compatible private message helpers used by `/user` and `/pm/*`.
-  """
+  @moduledoc "Legacy-compatible private message helpers used by `/user` and `/pm/*`.\n"
 
   alias ShimmiePhoenix.Repo
   alias ShimmiePhoenix.Site
   alias ShimmiePhoenix.Cache
   alias ShimmiePhoenix.Site.Users
 
-  @sqlite_separator <<31>>
-  @sqlite_row_separator <<30>>
   @cache_table :shimmie_private_messages_cache
 
-  def can_read?(user), do: logged_in?(user)
-  def can_send?(user), do: logged_in?(user)
-  def can_view_other?(user), do: admin?(user)
+  def can_read?(user) do
+    logged_in?(user)
+  end
+
+  def can_send?(user) do
+    logged_in?(user)
+  end
+
+  def can_view_other?(user) do
+    admin?(user)
+  end
 
   def list_for_display(display_user, actor) when is_map(display_user) do
     cond do
@@ -32,29 +36,29 @@ defmodule ShimmiePhoenix.Site.PrivateMessages do
     end
   end
 
-  def list_for_display(_, _), do: []
+  def list_for_display(_, _) do
+    []
+  end
 
   def unread_count(actor) when is_map(actor) do
     if can_read?(actor) do
-      case backend() do
-        {:repo} -> unread_count_repo(actor.id)
-        {:sqlite, path} -> unread_count_sqlite(path, actor.id)
-      end
+      unread_count_repo(actor.id)
     else
       0
     end
   end
 
-  def unread_count(_), do: 0
-
-  def list_for_user(user_id) when is_integer(user_id) and user_id > 0 do
-    case backend() do
-      {:repo} -> list_repo(user_id)
-      {:sqlite, path} -> list_sqlite(path, user_id)
-    end
+  def unread_count(_) do
+    0
   end
 
-  def list_for_user(_), do: []
+  def list_for_user(user_id) when is_integer(user_id) and user_id > 0 do
+    list_repo(user_id)
+  end
+
+  def list_for_user(_) do
+    []
+  end
 
   def get_visible(pm_id, actor) when is_integer(pm_id) and pm_id > 0 do
     with true <- can_read?(actor),
@@ -67,27 +71,27 @@ defmodule ShimmiePhoenix.Site.PrivateMessages do
     end
   end
 
-  def get_visible(_, _), do: {:error, :not_found}
-
-  def mark_read(pm_id) when is_integer(pm_id) and pm_id > 0 do
-    case backend() do
-      {:repo} -> mark_read_repo(pm_id)
-      {:sqlite, path} -> mark_read_sqlite(path, pm_id)
-    end
+  def get_visible(_, _) do
+    {:error, :not_found}
   end
 
-  def mark_read(_), do: {:error, :not_found}
+  def mark_read(pm_id) when is_integer(pm_id) and pm_id > 0 do
+    mark_read_repo(pm_id)
+  end
+
+  def mark_read(_) do
+    {:error, :not_found}
+  end
 
   def delete(pm_id, actor) when is_integer(pm_id) and pm_id > 0 do
     with {:ok, pm} <- get_visible(pm_id, actor) do
-      case backend() do
-        {:repo} -> delete_repo(pm.id)
-        {:sqlite, path} -> delete_sqlite(path, pm.id)
-      end
+      delete_repo(pm.id)
     end
   end
 
-  def delete(_, _), do: {:error, :not_found}
+  def delete(_, _) do
+    {:error, :not_found}
+  end
 
   def send(from_user, to_id, subject, message, from_ip)
       when is_integer(to_id) and is_binary(subject) and is_binary(message) do
@@ -102,23 +106,16 @@ defmodule ShimmiePhoenix.Site.PrivateMessages do
         {:error, :empty_message}
 
       true ->
-        case backend() do
-          {:repo} ->
-            send_repo(from_user.id, to_id, subject, message, from_ip)
-
-          {:sqlite, path} ->
-            send_sqlite(path, from_user.id, to_id, subject, message, from_ip)
-        end
+        send_repo(from_user.id, to_id, subject, message, from_ip)
     end
   end
 
-  def send(_, _, _, _, _), do: {:error, :invalid_request}
+  def send(_, _, _, _, _) do
+    {:error, :invalid_request}
+  end
 
   defp get(pm_id) do
-    case backend() do
-      {:repo} -> get_repo(pm_id)
-      {:sqlite, path} -> get_sqlite(path, pm_id)
-    end
+    get_repo(pm_id)
   end
 
   defp list_repo(user_id) do
@@ -137,40 +134,12 @@ defmodule ShimmiePhoenix.Site.PrivateMessages do
     end
   end
 
-  defp list_sqlite(path, user_id) do
-    with :ok <- ensure_sqlite_table(path) do
-      sql =
-        "SELECT pm.id, pm.from_id, COALESCE(u.name, 'Anonymous'), COALESCE(pm.from_ip, ''), pm.to_id, pm.sent_date, " <>
-          "COALESCE(pm.subject, ''), COALESCE(pm.message, ''), COALESCE(pm.is_read, 0) " <>
-          "FROM private_message pm LEFT JOIN users u ON u.id = pm.from_id " <>
-          "WHERE pm.to_id = #{user_id} ORDER BY pm.sent_date DESC"
-
-      sqlite_rows(path, sql)
-      |> Enum.map(&row_to_pm/1)
-    else
-      _ -> []
-    end
-  end
-
   defp unread_count_repo(user_id) do
     with :ok <- ensure_repo_table(),
          {:ok, %{rows: [[count]]}} <-
            Repo.query(
              "SELECT COUNT(*) FROM private_message WHERE to_id = $1 AND COALESCE(is_read, FALSE) = FALSE",
              [user_id]
-           ) do
-      parse_int(count)
-    else
-      _ -> 0
-    end
-  end
-
-  defp unread_count_sqlite(path, user_id) do
-    with :ok <- ensure_sqlite_table(path),
-         [[count] | _] <-
-           sqlite_rows(
-             path,
-             "SELECT COUNT(*) FROM private_message WHERE to_id = #{user_id} AND COALESCE(is_read, 0) = 0"
            ) do
       parse_int(count)
     else
@@ -193,34 +162,10 @@ defmodule ShimmiePhoenix.Site.PrivateMessages do
     end
   end
 
-  defp get_sqlite(path, pm_id) do
-    with :ok <- ensure_sqlite_table(path),
-         [row | _] <-
-           sqlite_rows(
-             path,
-             "SELECT pm.id, pm.from_id, COALESCE(u.name, 'Anonymous'), COALESCE(pm.from_ip, ''), pm.to_id, pm.sent_date, " <>
-               "COALESCE(pm.subject, ''), COALESCE(pm.message, ''), COALESCE(pm.is_read, 0) " <>
-               "FROM private_message pm LEFT JOIN users u ON u.id = pm.from_id WHERE pm.id = #{pm_id} LIMIT 1"
-           ) do
-      {:ok, row_to_pm(row)}
-    else
-      _ -> {:error, :not_found}
-    end
-  end
-
   defp mark_read_repo(pm_id) do
     with :ok <- ensure_repo_table(),
          {:ok, _} <-
            Repo.query("UPDATE private_message SET is_read = TRUE WHERE id = $1", [pm_id]) do
-      :ok
-    else
-      _ -> {:error, :db_failed}
-    end
-  end
-
-  defp mark_read_sqlite(path, pm_id) do
-    with :ok <- ensure_sqlite_table(path),
-         :ok <- sqlite_exec(path, "UPDATE private_message SET is_read = 1 WHERE id = #{pm_id}") do
       :ok
     else
       _ -> {:error, :db_failed}
@@ -236,15 +181,6 @@ defmodule ShimmiePhoenix.Site.PrivateMessages do
     end
   end
 
-  defp delete_sqlite(path, pm_id) do
-    with :ok <- ensure_sqlite_table(path),
-         :ok <- sqlite_exec(path, "DELETE FROM private_message WHERE id = #{pm_id}") do
-      :ok
-    else
-      _ -> {:error, :db_failed}
-    end
-  end
-
   defp send_repo(from_id, to_id, subject, message, from_ip) do
     with :ok <- ensure_repo_table(),
          {:ok, _} <-
@@ -252,23 +188,6 @@ defmodule ShimmiePhoenix.Site.PrivateMessages do
              "INSERT INTO private_message(from_id, from_ip, to_id, sent_date, subject, message, is_read) " <>
                "VALUES ($1, $2, $3, NOW(), $4, $5, FALSE)",
              [from_id, normalize_ip(from_ip), to_id, normalize_subject(subject), message]
-           ) do
-      :ok
-    else
-      _ -> {:error, :db_failed}
-    end
-  end
-
-  defp send_sqlite(path, from_id, to_id, subject, message, from_ip) do
-    with :ok <- ensure_sqlite_table(path),
-         {:ok, next_id} <- sqlite_next_id(path),
-         :ok <-
-           sqlite_exec(
-             path,
-             "INSERT INTO private_message(id, from_id, from_ip, to_id, sent_date, subject, message, is_read) VALUES (" <>
-               "#{next_id}, #{from_id}, #{sqlite_literal(normalize_ip(from_ip))}, #{to_id}, " <>
-               "#{sqlite_literal(timestamp_now())}, #{sqlite_literal(normalize_subject(subject))}, " <>
-               "#{sqlite_literal(message)}, 0)"
            ) do
       :ok
     else
@@ -306,85 +225,6 @@ defmodule ShimmiePhoenix.Site.PrivateMessages do
     end
   end
 
-  defp ensure_sqlite_table(path) do
-    key = {:sqlite, path, :ready}
-
-    if cache_get(key) do
-      :ok
-    else
-      with :ok <-
-             sqlite_exec(
-               path,
-               "CREATE TABLE IF NOT EXISTS private_message (" <>
-                 "id INTEGER PRIMARY KEY, " <>
-                 "from_id INTEGER NOT NULL, " <>
-                 "from_ip TEXT NOT NULL DEFAULT '', " <>
-                 "to_id INTEGER NOT NULL, " <>
-                 "sent_date TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, " <>
-                 "subject TEXT NOT NULL, " <>
-                 "message TEXT NOT NULL, " <>
-                 "is_read INTEGER NOT NULL DEFAULT 0)"
-             ),
-           :ok <-
-             sqlite_exec(
-               path,
-               "CREATE INDEX IF NOT EXISTS private_message__to_id ON private_message(to_id)"
-             ) do
-        cache_put(key)
-        :ok
-      else
-        _ -> {:error, :create_failed}
-      end
-    end
-  end
-
-  defp sqlite_next_id(path) do
-    {:ok, ShimmiePhoenix.IDAllocator.next_sqlite!(path, "private_message")}
-  end
-
-  defp backend do
-    case sqlite_db_path() do
-      nil -> {:repo}
-      path -> {:sqlite, path}
-    end
-  end
-
-  defp sqlite_db_path do
-    case Site.sqlite_db_path() do
-      nil -> nil
-      path -> if File.exists?(path), do: path, else: nil
-    end
-  end
-
-  defp sqlite_rows(path, sql) do
-    args = [
-      "-noheader",
-      "-separator",
-      @sqlite_separator,
-      "-newline",
-      @sqlite_row_separator,
-      path,
-      sql
-    ]
-
-    case System.cmd("sqlite3", args, stderr_to_stdout: true) do
-      {output, 0} ->
-        output
-        |> String.split(@sqlite_row_separator, trim: true)
-        |> Enum.map(fn line -> String.split(line, @sqlite_separator) end)
-
-      _ ->
-        []
-    end
-  end
-
-  defp sqlite_exec(path, sql) do
-    case System.cmd("sqlite3", [path, sql], stderr_to_stdout: true) do
-      {_output, 0} -> :ok
-      _ -> {:error, :sqlite_failed}
-    end
-  end
-
   defp row_to_pm([id, from_id, from_name, from_ip, to_id, sent_date, subject, message, is_read]) do
     %{
       id: parse_int(id),
@@ -399,7 +239,9 @@ defmodule ShimmiePhoenix.Site.PrivateMessages do
     }
   end
 
-  defp row_to_pm(_), do: %{}
+  defp row_to_pm(_) do
+    %{}
+  end
 
   defp normalize_subject(value) do
     value
@@ -412,7 +254,9 @@ defmodule ShimmiePhoenix.Site.PrivateMessages do
     end
   end
 
-  defp normalize_ip(value), do: value |> to_string() |> String.trim() |> String.slice(0, 128)
+  defp normalize_ip(value) do
+    value |> to_string() |> String.trim() |> String.slice(0, 128)
+  end
 
   defp parse_int(value) do
     case Integer.parse(to_string(value || "")) do
@@ -421,17 +265,29 @@ defmodule ShimmiePhoenix.Site.PrivateMessages do
     end
   end
 
-  defp parse_bool(value) when value in [true, "true", "TRUE", "t", "1", 1], do: true
-  defp parse_bool(_), do: false
+  defp parse_bool(value) when value in [true, "true", "TRUE", "t", "1", 1] do
+    true
+  end
+
+  defp parse_bool(_) do
+    false
+  end
 
   defp logged_in?(%{id: id}) when is_integer(id) and id > 0 do
     id != Users.anonymous_id()
   end
 
-  defp logged_in?(_), do: false
+  defp logged_in?(_) do
+    false
+  end
 
-  defp admin?(%{class: class}), do: to_string(class) == "admin"
-  defp admin?(_), do: false
+  defp admin?(%{class: class}) do
+    to_string(class) == "admin"
+  end
+
+  defp admin?(_) do
+    false
+  end
 
   defp cache_get(key) do
     case Cache.lookup(@cache_table, key) do
@@ -443,14 +299,5 @@ defmodule ShimmiePhoenix.Site.PrivateMessages do
   defp cache_put(key) do
     Cache.insert(@cache_table, {key, true})
     :ok
-  end
-
-  defp sqlite_literal(value), do: "'#{escape_sqlite_string(to_string(value))}'"
-  defp escape_sqlite_string(value), do: String.replace(value, "'", "''")
-
-  defp timestamp_now do
-    NaiveDateTime.utc_now()
-    |> NaiveDateTime.truncate(:second)
-    |> NaiveDateTime.to_string()
   end
 end

@@ -1,7 +1,5 @@
 defmodule ShimmiePhoenix.Site.PostSet do
-  @moduledoc """
-  Legacy-compatible /post/set handler for editing post metadata in post/view.
-  """
+  @moduledoc "Legacy-compatible /post/set handler for editing post metadata in post/view.\n"
 
   alias ShimmiePhoenix.Repo
   alias ShimmiePhoenix.Site
@@ -30,16 +28,22 @@ defmodule ShimmiePhoenix.Site.PostSet do
     end
   end
 
-  def can_edit_post_info?(actor), do: PostAdmin.admin?(actor)
+  def can_edit_post_info?(actor) do
+    PostAdmin.admin?(actor)
+  end
 
   defp can_edit_anything?(params, actor) when is_map(params) do
     (has_tag_change?(params) and TagEdit.can_edit_tags?(actor)) or
       (has_meta_change?(params) and can_edit_post_info?(actor))
   end
 
-  defp can_edit_anything?(_, _), do: false
+  defp can_edit_anything?(_, _) do
+    false
+  end
 
-  defp has_tag_change?(params), do: Map.has_key?(params, "tags")
+  defp has_tag_change?(params) do
+    Map.has_key?(params, "tags")
+  end
 
   defp has_meta_change?(params) do
     Map.has_key?(params, "source") or Map.has_key?(params, "parent") or
@@ -78,26 +82,12 @@ defmodule ShimmiePhoenix.Site.PostSet do
   end
 
   defp update_meta(image_id, source, parent_id, rating, locked) do
-    case sqlite_db_path() do
-      nil ->
-        case Repo.query(
-               "UPDATE images SET source = $1, parent_id = $2, rating = $3, locked = $4 WHERE id = $5",
-               [source, parent_id, rating, locked, image_id]
-             ) do
-          {:ok, _} -> :ok
-          _ -> {:error, :update_failed}
-        end
-
-      path ->
-        sql =
-          "UPDATE images SET " <>
-            "source = #{sqlite_value(source)}, " <>
-            "parent_id = #{sqlite_int_or_null(parent_id)}, " <>
-            "rating = #{sqlite_value(rating)}, " <>
-            "locked = #{if(locked, do: "1", else: "0")} " <>
-            "WHERE id = #{image_id}"
-
-        sqlite_exec(path, sql)
+    case Repo.query(
+           "UPDATE images SET source = $1, parent_id = $2, rating = $3, locked = $4 WHERE id = $5",
+           [source, parent_id, rating, locked, image_id]
+         ) do
+      {:ok, _} -> :ok
+      _ -> {:error, :update_failed}
     end
   end
 
@@ -108,12 +98,21 @@ defmodule ShimmiePhoenix.Site.PostSet do
         _ -> nil
       end
 
-    if parsed == image_id, do: nil, else: parsed
+    if parsed == image_id do
+      nil
+    else
+      parsed
+    end
   end
 
   defp normalize_rating(value) do
     rating = value |> to_string() |> String.trim() |> String.downcase()
-    if MapSet.member?(@allowed_ratings, rating), do: rating, else: "?"
+
+    if MapSet.member?(@allowed_ratings, rating) do
+      rating
+    else
+      "?"
+    end
   end
 
   defp truthy?(value) do
@@ -124,7 +123,9 @@ defmodule ShimmiePhoenix.Site.PostSet do
     |> then(&(&1 in ["1", "true", "yes", "on", "y"]))
   end
 
-  defp parse_image_id(image_id) when is_integer(image_id) and image_id > 0, do: {:ok, image_id}
+  defp parse_image_id(image_id) when is_integer(image_id) and image_id > 0 do
+    {:ok, image_id}
+  end
 
   defp parse_image_id(image_id) when is_binary(image_id) do
     case Integer.parse(image_id) do
@@ -133,23 +134,7 @@ defmodule ShimmiePhoenix.Site.PostSet do
     end
   end
 
-  defp parse_image_id(_), do: {:error, :invalid_image_id}
-
-  defp sqlite_db_path do
-    case Site.sqlite_db_path() do
-      nil -> nil
-      path -> if File.exists?(path), do: path, else: nil
-    end
+  defp parse_image_id(_) do
+    {:error, :invalid_image_id}
   end
-
-  defp sqlite_exec(path, query) do
-    ShimmiePhoenix.Mutation.sqlite_exec(path, query)
-  end
-
-  defp sqlite_value(nil), do: "NULL"
-  defp sqlite_value(value), do: "'" <> escape_sqlite(to_string(value)) <> "'"
-  defp sqlite_int_or_null(nil), do: "NULL"
-  defp sqlite_int_or_null(value), do: to_string(value)
-
-  defp escape_sqlite(value), do: String.replace(value, "'", "''")
 end

@@ -6,33 +6,18 @@ defmodule ShimmiePhoenix.IDAllocator do
 
   def next!(table) when table in @tables do
     [[id]] = Repo.query!("SELECT nextval(pg_get_serial_sequence($1, 'id'))", [table]).rows
-    if is_integer(id) and id > 0, do: id, else: raise("ID allocation migration is required")
-  end
 
-  def next_sqlite!(path, table) when table in @tables do
-    sql =
-      "BEGIN IMMEDIATE; CREATE TABLE IF NOT EXISTS shimmie_id_allocations(name TEXT PRIMARY KEY, value INTEGER NOT NULL); " <>
-        "INSERT INTO shimmie_id_allocations(name,value) VALUES ('#{table}', (SELECT MAX(COALESCE(MAX(id),0),0)+1 FROM #{table})) " <>
-        "ON CONFLICT(name) DO UPDATE SET value=MAX(value,(SELECT COALESCE(MAX(id),0) FROM #{table}))+1; " <>
-        "SELECT value FROM shimmie_id_allocations WHERE name='#{table}'; COMMIT;"
-
-    case System.cmd("sqlite3", ["-bail", "-cmd", ".timeout 5000", path, sql],
-           stderr_to_stdout: true
-         ) do
-      {output, 0} ->
-        {id, ""} = output |> String.trim() |> Integer.parse()
-        id
-
-      _ ->
-        raise "SQLite ID allocation failed"
+    if is_integer(id) and id > 0 do
+      id
+    else
+      raise("ID allocation migration is required")
     end
   end
 
-  # Called only by the approved forward migration (and synthetic schema tests).
-  # Deploy with legacy MAX+1 writers stopped. Existing IDs and higher sequence
-  # positions are preserved, including identity/serial sequences already owned.
   def install!(repo, schema \\ "public") do
-    unless Regex.match?(~r/\A[a-z_][a-z0-9_]*\z/, schema), do: raise("Invalid schema")
+    unless Regex.match?(~r/\A[a-z_][a-z0-9_]*\z/, schema) do
+      raise("Invalid schema")
+    end
 
     Enum.each(@tables, fn table ->
       qualified = ~s("#{schema}"."#{table}")
@@ -46,15 +31,17 @@ defmodule ShimmiePhoenix.IDAllocator do
             [schema, table]
           ).rows
 
-        unless type in ["bigint", "integer", "smallint"],
-          do: raise("Noninteger ID requires manual review")
+        unless type in ["bigint", "integer", "smallint"] do
+          raise("Noninteger ID requires manual review")
+        end
 
         [[sequence]] = repo.query!("SELECT pg_get_serial_sequence($1,'id')", [qualified]).rows
 
         sequence =
           if is_nil(sequence) do
-            unless is_nil(default) and identity == "NO",
-              do: raise("Unrecognized ID default requires manual review")
+            unless is_nil(default) and identity == "NO" do
+              raise("Unrecognized ID default requires manual review")
+            end
 
             sequence = ~s("#{schema}"."#{table}_shimmie_id_seq")
             repo.query!("CREATE SEQUENCE #{sequence} AS BIGINT")
@@ -70,9 +57,17 @@ defmodule ShimmiePhoenix.IDAllocator do
           end
 
         [[max_id]] = repo.query!("SELECT GREATEST(COALESCE(MAX(id),0),0) FROM #{qualified}").rows
-        # Use a regclass-derived identifier from PostgreSQL, not request input.
         [[last, called]] = repo.query!("SELECT last_value,is_called FROM #{sequence}").rows
-        next = max(max_id + 1, if(called, do: last + 1, else: last))
+
+        next =
+          max(
+            max_id + 1,
+            if(called) do
+              last + 1
+            else
+              last
+            end
+          )
 
         [[increment, cycle]] =
           repo.query!(
@@ -80,8 +75,9 @@ defmodule ShimmiePhoenix.IDAllocator do
             [sequence]
           ).rows
 
-        unless increment == 1 and cycle == false,
-          do: raise("Nonstandard sequence requires manual review")
+        unless increment == 1 and cycle == false do
+          raise("Nonstandard sequence requires manual review")
+        end
 
         repo.query!("SELECT setval($1::text::regclass,$2,false)", [sequence, next])
       end

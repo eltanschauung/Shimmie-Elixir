@@ -1,18 +1,11 @@
 defmodule ShimmiePhoenix.Site.TagEdit do
-  @moduledoc """
-  Tag edit helpers for post/view tag updates.
-  """
+  @moduledoc "Tag edit helpers for post/view tag updates.\n"
 
   alias ShimmiePhoenix.Site
   alias ShimmiePhoenix.Site.Permissions
   alias ShimmiePhoenix.Site.Store
   alias ShimmiePhoenix.Site.TagRules
   alias ShimmiePhoenix.Repo
-
-  require Logger
-
-  @sqlite_separator <<31>>
-  @sqlite_row_separator <<30>>
 
   def can_edit_tags?(actor) do
     actor_id(actor) > 0 and Permissions.allowed?(:tag_edit, actor_class(actor))
@@ -34,10 +27,7 @@ defmodule ShimmiePhoenix.Site.TagEdit do
   end
 
   defp apply_update(image_id, tags, actor, remote_ip) do
-    case sqlite_db_path() do
-      nil -> update_repo(image_id, tags, actor, remote_ip)
-      path -> update_sqlite(path, image_id, tags, actor, remote_ip)
-    end
+    update_repo(image_id, tags, actor, remote_ip)
   end
 
   defp actor_class(%{class: class}) do
@@ -47,7 +37,9 @@ defmodule ShimmiePhoenix.Site.TagEdit do
     |> String.downcase()
   end
 
-  defp actor_class(_), do: ""
+  defp actor_class(_) do
+    ""
+  end
 
   defp update_repo(image_id, tags, actor, remote_ip) do
     ShimmiePhoenix.Mutation.atomic(fn ->
@@ -63,9 +55,7 @@ defmodule ShimmiePhoenix.Site.TagEdit do
           _ =
             Repo.query!(
               "UPDATE tags SET count = GREATEST(COALESCE(count, 0) - 1, 0) WHERE id = $1",
-              [
-                tag_id
-              ]
+              [tag_id]
             )
         else
           _ -> :ok
@@ -92,41 +82,6 @@ defmodule ShimmiePhoenix.Site.TagEdit do
     end)
   rescue
     _ -> {:error, :update_failed}
-  end
-
-  defp update_sqlite(path, image_id, tags, actor, remote_ip) do
-    # All reads used to derive counters and IDs execute under one SQLite write
-    # lock, not through separate sqlite3 processes with stale snapshots.
-    desired = Enum.map_join(tags, ",", fn tag -> "(" <> sqlite_literal(tag) <> ")" end)
-
-    insert_desired =
-      if desired == "",
-        do: "",
-        else: "INSERT OR IGNORE INTO desired_tags(tag) VALUES " <> desired <> "; "
-
-    history =
-      if sqlite_table_exists?(path, "tag_histories") do
-        "INSERT INTO tag_histories(id,image_id,tags,user_id,user_ip,date_set) SELECT COALESCE(MAX(id),0)+1,#{image_id}," <>
-          sqlite_literal(Enum.join(tags, " ")) <>
-          ",#{actor_id(actor)}," <>
-          sqlite_literal(normalize_ip(remote_ip)) <>
-          ",CURRENT_TIMESTAMP FROM tag_histories; "
-      else
-        ""
-      end
-
-    sql =
-      "CREATE TEMP TABLE desired_tags(tag TEXT PRIMARY KEY); " <>
-        insert_desired <>
-        "CREATE TEMP TABLE previous_tags AS SELECT tag_id FROM image_tags WHERE image_id=#{image_id}; " <>
-        "INSERT INTO tags(id,tag,count) SELECT (SELECT COALESCE(MAX(id),0) FROM tags)+ROW_NUMBER() OVER(ORDER BY d.tag),d.tag,0 FROM desired_tags d WHERE NOT EXISTS(SELECT 1 FROM tags t WHERE t.tag=d.tag); " <>
-        "UPDATE tags SET count=MAX(COALESCE(count,0)-1,0) WHERE id IN(SELECT tag_id FROM previous_tags) AND tag NOT IN(SELECT tag FROM desired_tags); " <>
-        "DELETE FROM image_tags WHERE image_id=#{image_id} AND tag_id IN(SELECT id FROM tags WHERE tag NOT IN(SELECT tag FROM desired_tags)); " <>
-        "UPDATE tags SET count=COALESCE(count,0)+1 WHERE tag IN(SELECT tag FROM desired_tags) AND id NOT IN(SELECT tag_id FROM previous_tags); " <>
-        "INSERT OR IGNORE INTO image_tags(image_id,tag_id) SELECT #{image_id},id FROM tags WHERE tag IN(SELECT tag FROM desired_tags); " <>
-        history
-
-    ShimmiePhoenix.Mutation.atomic(fn -> sqlite_exec(path, sql) end)
   end
 
   defp current_tags_repo(image_id) do
@@ -220,7 +175,9 @@ defmodule ShimmiePhoenix.Site.TagEdit do
     end
   end
 
-  defp actor_id(_), do: Store.get_config("anon_id", "1") |> to_string() |> parse_int()
+  defp actor_id(_) do
+    Store.get_config("anon_id", "1") |> to_string() |> parse_int()
+  end
 
   defp normalize_ip(value) do
     case value |> to_string() |> String.trim() do
@@ -234,69 +191,5 @@ defmodule ShimmiePhoenix.Site.TagEdit do
       {n, ""} -> n
       _ -> 0
     end
-  end
-
-  defp sqlite_db_path do
-    case Site.sqlite_db_path() do
-      nil -> nil
-      path -> if File.exists?(path), do: path, else: nil
-    end
-  end
-
-  defp sqlite_rows(path, query) do
-    args = [
-      "-noheader",
-      "-separator",
-      @sqlite_separator,
-      "-newline",
-      @sqlite_row_separator,
-      path,
-      query
-    ]
-
-    case System.cmd("sqlite3", args, stderr_to_stdout: true) do
-      {output, 0} ->
-        rows =
-          output
-          |> String.split(@sqlite_row_separator, trim: true)
-          |> Enum.map(fn line -> String.split(line, @sqlite_separator) end)
-
-        {:ok, rows}
-
-      {output, _} ->
-        Logger.warning("tag_edit.sqlite rows failed: #{String.trim(output)}")
-        {:error, :sqlite_failed}
-    end
-  end
-
-  defp sqlite_exec(path, query) do
-    ShimmiePhoenix.Mutation.sqlite_exec(path, query)
-  end
-
-  defp sqlite_table_exists?(path, table) do
-    escaped_table = escape_sqlite_string(table)
-
-    case sqlite_rows(path, "PRAGMA table_info('#{escaped_table}')") do
-      {:ok, rows} ->
-        Enum.any?(rows, fn row ->
-          case row do
-            [_cid, name | _] -> String.downcase(name) == "id"
-            _ -> false
-          end
-        end)
-
-      _ ->
-        false
-    end
-  end
-
-  defp sqlite_literal(value) do
-    "'" <> escape_sqlite_string(value) <> "'"
-  end
-
-  defp escape_sqlite_string(value) do
-    value
-    |> to_string()
-    |> String.replace("'", "''")
   end
 end

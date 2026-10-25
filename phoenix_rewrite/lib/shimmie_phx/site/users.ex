@@ -1,7 +1,5 @@
 defmodule ShimmiePhoenix.Site.Users do
-  @moduledoc """
-  Legacy-compatible user/account helpers for /user_admin routes.
-  """
+  @moduledoc "Legacy-compatible user/account helpers for /user_admin routes.\n"
 
   import Bitwise
   require Logger
@@ -12,8 +10,6 @@ defmodule ShimmiePhoenix.Site.Users do
   alias ShimmiePhoenix.{AuthThrottle, PasswordPolicy}
 
   @username_regex ~r/^[a-zA-Z0-9\-_]+$/
-  @sqlite_separator <<31>>
-  @sqlite_row_separator <<30>>
   @site_user_id_key :site_user_id
   @site_user_name_key :site_user_name
   @legacy_user_id_key :legacy_user_id
@@ -23,27 +19,42 @@ defmodule ShimmiePhoenix.Site.Users do
   @legacy_salt "legacy-session-v2"
   alias ShimmiePhoenixWeb.Endpoint
 
-  def signup_enabled?, do: config_bool("login_signup_enabled", true)
-  def user_email_required?, do: config_bool("user_email_required", false)
+  def signup_enabled? do
+    config_bool("login_signup_enabled", true)
+  end
 
-  def login_redirect_mode,
-    do: to_string(Store.get_config("user_login_redirect", "previous") || "previous")
+  def user_email_required? do
+    config_bool("user_email_required", false)
+  end
 
-  def login_memory_days, do: config_int("login_memory", 365)
+  def login_redirect_mode do
+    to_string(Store.get_config("user_login_redirect", "previous") || "previous")
+  end
 
-  def session_hash_mask,
-    do: to_string(Store.get_config("session_hash_mask", "255.255.0.0") || "255.255.0.0")
+  def login_memory_days do
+    config_int("login_memory", 365)
+  end
 
-  def recaptcha_site_key, do: to_string(Store.get_config("api_recaptcha_pubkey", "") || "")
-  def anonymous_id, do: config_int("anon_id", 1)
+  def session_hash_mask do
+    to_string(Store.get_config("session_hash_mask", "255.255.0.0") || "255.255.0.0")
+  end
+
+  def recaptcha_site_key do
+    to_string(Store.get_config("api_recaptcha_pubkey", "") || "")
+  end
+
+  def anonymous_id do
+    config_int("anon_id", 1)
+  end
 
   def current_user(conn) do
     case raw_session_user_id(conn) do
       id when is_integer(id) and id > 0 ->
         user = user_by_id(id)
 
-        if valid_proof?(user, Plug.Conn.get_session(conn, @session_proof_key), @session_salt),
-          do: user
+        if valid_proof?(user, Plug.Conn.get_session(conn, @session_proof_key), @session_salt) do
+          user
+        end
 
       _ ->
         conn = Plug.Conn.fetch_cookies(conn)
@@ -56,9 +67,11 @@ defmodule ShimmiePhoenix.Site.Users do
               nil
 
             user ->
-              if valid_session?(user, token, remote_ip_string(conn)),
-                do: user,
-                else: nil
+              if valid_session?(user, token, remote_ip_string(conn)) do
+                user
+              else
+                nil
+              end
           end
         else
           nil
@@ -105,8 +118,13 @@ defmodule ShimmiePhoenix.Site.Users do
     |> Plug.Conn.put_session(@legacy_user_name_key, name)
   end
 
-  def get_user_by_id(id) when is_integer(id) and id > 0, do: user_by_id(id)
-  def get_user_by_id(_), do: nil
+  def get_user_by_id(id) when is_integer(id) and id > 0 do
+    user_by_id(id)
+  end
+
+  def get_user_by_id(_) do
+    nil
+  end
 
   def get_user_by_name(name) when is_binary(name) do
     trimmed = String.trim(name)
@@ -116,7 +134,9 @@ defmodule ShimmiePhoenix.Site.Users do
       user_by_name(String.replace(trimmed, "_", " "))
   end
 
-  def get_user_by_name(_), do: nil
+  def get_user_by_name(_) do
+    nil
+  end
 
   def login(name, pass, remote_ip) when is_binary(name) and is_binary(pass) do
     with true <- byte_size(name) <= 256 and byte_size(pass) <= 4096,
@@ -128,10 +148,12 @@ defmodule ShimmiePhoenix.Site.Users do
     end
   end
 
-  def login(_, _, _), do: {:error, :invalid_credentials}
+  def login(_, _, _) do
+    {:error, :invalid_credentials}
+  end
 
   defp authenticate(name, pass, remote_ip) do
-    backend = active_backend()
+    backend = "repo"
 
     case user_by_name(String.trim(name)) ||
            user_by_name(String.replace(String.trim(name), " ", "_")) do
@@ -171,7 +193,11 @@ defmodule ShimmiePhoenix.Site.Users do
          :ok <- validate_email_requirement(email) do
       class_name =
         Map.get(opts, :class) ||
-          if(MapSet.member?(columns, "class"), do: "user", else: nil)
+          if(MapSet.member?(columns, "class")) do
+            "user"
+          else
+            nil
+          end
 
       base_cols = []
       base_vals = []
@@ -195,7 +221,13 @@ defmodule ShimmiePhoenix.Site.Users do
 
       {cols, vals} =
         if MapSet.member?(columns, "email") do
-          value = if(email == "", do: nil, else: email)
+          value =
+            if(email == "") do
+              nil
+            else
+              email
+            end
+
           {cols ++ [~s("email")], vals ++ [value]}
         else
           {cols, vals}
@@ -250,7 +282,12 @@ defmodule ShimmiePhoenix.Site.Users do
         |> to_string()
         |> then(fn v ->
           parsed = parse_positive(v, 0)
-          if parsed > 0, do: Integer.to_string(parsed), else: ""
+
+          if parsed > 0 do
+            Integer.to_string(parsed)
+          else
+            ""
+          end
         end),
       r_name: params |> Map.get("r_name", "") |> to_string() |> String.trim(),
       r_email: params |> Map.get("r_email", "") |> to_string() |> String.trim(),
@@ -258,11 +295,7 @@ defmodule ShimmiePhoenix.Site.Users do
       r_joindate: [r_dates.from, r_dates.to]
     }
 
-    if use_sqlite?() do
-      list_users_sqlite(params, columns, page_size, page, filter_state)
-    else
-      list_users_repo(params, columns, page_size, page)
-    end
+    list_users_repo(params, columns, page_size, page)
   end
 
   defp list_users_repo(params, columns, page_size, page) do
@@ -331,55 +364,9 @@ defmodule ShimmiePhoenix.Site.Users do
     }
   end
 
-  defp list_users_sqlite(params, columns, page_size, page, filter_state) do
-    {where_sql, sort} = sqlite_user_filters(params, columns)
-    total_count = sqlite_count("SELECT COUNT(*) FROM users#{where_sql}")
-    total_pages = max(1, div(total_count + page_size - 1, page_size))
-    page = min(max(page, 1), total_pages)
-    offset = (page - 1) * page_size
-
-    join_date_expr =
-      if MapSet.member?(columns, "joindate"),
-        do: "COALESCE(CAST(joindate AS TEXT), '')",
-        else: "''"
-
-    class_expr =
-      if MapSet.member?(columns, "class"), do: "COALESCE(class, 'user')", else: "'user'"
-
-    email_enabled? = MapSet.member?(columns, "email")
-    email_expr = if(email_enabled?, do: "COALESCE(email, '')", else: "''")
-
-    sql =
-      "SELECT id, name, #{class_expr} AS class, #{join_date_expr} AS joindate, #{email_expr} AS email " <>
-        "FROM users#{where_sql} ORDER BY #{sort_order(sort)} " <>
-        "LIMIT #{page_size} OFFSET #{offset}"
-
-    rows =
-      sqlite_rows(sql)
-      |> Enum.map(fn [id, name, class_name, join_date, email] ->
-        %{
-          id: parse_positive(id, 0),
-          name: to_string(name || ""),
-          class: to_string(class_name || "user"),
-          join_date: join_date |> to_string() |> String.slice(0, 10),
-          email: to_string(email || "")
-        }
-      end)
-
-    %{
-      users: rows,
-      classes: list_classes(columns),
-      page: page,
-      page_size: page_size,
-      total_pages: total_pages,
-      total_count: total_count,
-      sort: sort,
-      filters: filter_state,
-      email_enabled?: email_enabled?
-    }
+  def recover(_username) do
+    {:error, :recovery_unavailable}
   end
-
-  def recover(_username), do: {:error, :recovery_unavailable}
 
   def change_name(actor, params) do
     with {:ok, user_id} <- parse_user_id(params["id"]),
@@ -472,10 +459,18 @@ defmodule ShimmiePhoenix.Site.Users do
       anon = anonymous_id()
 
       image_action =
-        if with_images, do: &delete_user_images/1, else: &reassign_user_images(&1, anon)
+        if with_images do
+          &delete_user_images/1
+        else
+          &reassign_user_images(&1, anon)
+        end
 
       comment_action =
-        if with_comments, do: &delete_user_comments/1, else: &reassign_user_comments(&1, anon)
+        if with_comments do
+          &delete_user_comments/1
+        else
+          &reassign_user_comments(&1, anon)
+        end
 
       with {:ok, _} <- image_action.(user.id),
            {:ok, _} <- comment_action.(user.id),
@@ -512,10 +507,12 @@ defmodule ShimmiePhoenix.Site.Users do
     |> Base.url_encode64(padding: false)
   end
 
-  defp session_max_age, do: max(60, min(max(login_memory_days(), 0), 365) * 86_400)
+  defp session_max_age do
+    max(60, min(max(login_memory_days(), 0), 365) * 86400)
+  end
 
   defp valid_proof?(%{id: id} = user, token, salt)
-       when is_binary(token) and byte_size(token) < 4_096 do
+       when is_binary(token) and byte_size(token) < 4096 do
     with {:ok, %{id: ^id, credential: credential}} <-
            Phoenix.Token.verify(Endpoint, salt, token, max_age: session_max_age()),
          true <- is_binary(credential) do
@@ -525,7 +522,9 @@ defmodule ShimmiePhoenix.Site.Users do
     end
   end
 
-  defp valid_proof?(_, _, _), do: false
+  defp valid_proof?(_, _, _) do
+    false
+  end
 
   def remote_ip_string(%Plug.Conn{} = conn) do
     proxy_tuple = normalize_ipv4_mapped_ipv6(conn.remote_ip)
@@ -551,14 +550,33 @@ defmodule ShimmiePhoenix.Site.Users do
     |> to_string()
   end
 
-  def remote_ip_string(_), do: "0.0.0.0"
+  def remote_ip_string(_) do
+    "0.0.0.0"
+  end
 
-  defp trusted_proxy?({127, _, _, _}), do: true
-  defp trusted_proxy?({10, _, _, _}), do: true
-  defp trusted_proxy?({192, 168, _, _}), do: true
-  defp trusted_proxy?({172, second, _, _}) when second in 16..31, do: true
-  defp trusted_proxy?({0, 0, 0, 0, 0, 0, 0, 1}), do: true
-  defp trusted_proxy?(_), do: false
+  defp trusted_proxy?({127, _, _, _}) do
+    true
+  end
+
+  defp trusted_proxy?({10, _, _, _}) do
+    true
+  end
+
+  defp trusted_proxy?({192, 168, _, _}) do
+    true
+  end
+
+  defp trusted_proxy?({172, second, _, _}) when second in 16..31 do
+    true
+  end
+
+  defp trusted_proxy?({0, 0, 0, 0, 0, 0, 0, 1}) do
+    true
+  end
+
+  defp trusted_proxy?(_) do
+    false
+  end
 
   defp forwarded_for(conn) do
     conn
@@ -573,16 +591,19 @@ defmodule ShimmiePhoenix.Site.Users do
     end
   end
 
-  defp forwarded_for_ip(nil), do: nil
-  defp forwarded_for_ip(""), do: nil
+  defp forwarded_for_ip(nil) do
+    nil
+  end
+
+  defp forwarded_for_ip("") do
+    nil
+  end
 
   defp forwarded_for_ip(header) when is_binary(header) do
     header
     |> String.split(",")
     |> Enum.map(&String.trim/1)
     |> Enum.reject(&(&1 == ""))
-    # Apache appends REMOTE_ADDR to the end, so using the right-most valid
-    # entry avoids trusting client-supplied prepended values.
     |> Enum.reverse()
     |> Enum.find_value(fn ip ->
       case :inet.parse_address(String.to_charlist(ip)) do
@@ -592,16 +613,18 @@ defmodule ShimmiePhoenix.Site.Users do
     end)
   end
 
-  defp normalize_ipv4_mapped_ipv6({0, 0, 0, 0, 0, 65_535, high, low}) do
+  defp normalize_ipv4_mapped_ipv6({0, 0, 0, 0, 0, 65535, high, low}) do
     {
-      Bitwise.band(Bitwise.bsr(high, 8), 0xFF),
-      Bitwise.band(high, 0xFF),
-      Bitwise.band(Bitwise.bsr(low, 8), 0xFF),
-      Bitwise.band(low, 0xFF)
+      Bitwise.band(Bitwise.bsr(high, 8), 255),
+      Bitwise.band(high, 255),
+      Bitwise.band(Bitwise.bsr(low, 8), 255),
+      Bitwise.band(low, 255)
     }
   end
 
-  defp normalize_ipv4_mapped_ipv6(tuple), do: tuple
+  defp normalize_ipv4_mapped_ipv6(tuple) do
+    tuple
+  end
 
   defp users_count(where_sql, args) do
     case Repo.query("SELECT COUNT(*) FROM users#{where_sql}", args) do
@@ -672,7 +695,12 @@ defmodule ShimmiePhoenix.Site.Users do
       end
 
     filter_state = %{
-      r_id: if(r_id > 0, do: Integer.to_string(r_id), else: ""),
+      r_id:
+        if(r_id > 0) do
+          Integer.to_string(r_id)
+        else
+          ""
+        end,
       r_name: r_name,
       r_email: r_email,
       r_class: r_class,
@@ -688,7 +716,9 @@ defmodule ShimmiePhoenix.Site.Users do
     %{from: from, to: to}
   end
 
-  defp normalize_joindate(_), do: %{from: "", to: ""}
+  defp normalize_joindate(_) do
+    %{from: "", to: ""}
+  end
 
   defp normalize_sort(value, columns) do
     sort = value |> to_string() |> String.trim()
@@ -712,25 +742,30 @@ defmodule ShimmiePhoenix.Site.Users do
     end
   end
 
-  defp sort_order("name"), do: "LOWER(name) ASC, id DESC"
-  defp sort_order("email"), do: "LOWER(COALESCE(email, '')) ASC, id DESC"
-  defp sort_order("class"), do: "LOWER(class) ASC, id DESC"
-  defp sort_order("joindate"), do: "joindate DESC NULLS LAST, id DESC"
-  defp sort_order(_), do: "id DESC"
+  defp sort_order("name") do
+    "LOWER(name) ASC, id DESC"
+  end
+
+  defp sort_order("email") do
+    "LOWER(COALESCE(email, '')) ASC, id DESC"
+  end
+
+  defp sort_order("class") do
+    "LOWER(class) ASC, id DESC"
+  end
+
+  defp sort_order("joindate") do
+    "joindate DESC NULLS LAST, id DESC"
+  end
+
+  defp sort_order(_) do
+    "id DESC"
+  end
 
   defp list_classes(columns) do
     cond do
       not MapSet.member?(columns, "class") ->
         ["user"]
-
-      use_sqlite?() ->
-        sqlite_rows("SELECT DISTINCT class FROM users WHERE class IS NOT NULL ORDER BY class ASC")
-        |> Enum.map(fn [value] -> to_string(value || "") end)
-        |> Enum.reject(&(&1 == ""))
-        |> case do
-          [] -> ["admin", "anonymous", "base", "user"]
-          values -> values
-        end
 
       true ->
         case Repo.query(
@@ -749,59 +784,43 @@ defmodule ShimmiePhoenix.Site.Users do
   end
 
   defp next_user_id do
-    if use_sqlite?() do
-      ShimmiePhoenix.IDAllocator.next_sqlite!(sqlite_db_path!(), "users")
-    else
-      ShimmiePhoenix.IDAllocator.next!("users")
-    end
+    ShimmiePhoenix.IDAllocator.next!("users")
   end
 
   defp parse_user_id(value) do
     id = parse_positive(value, 0)
-    if id > 0, do: {:ok, id}, else: {:error, :invalid_user_id}
+
+    if id > 0 do
+      {:ok, id}
+    else
+      {:error, :invalid_user_id}
+    end
   end
 
   defp user_by_id(id) when is_integer(id) and id > 0 do
-    if use_sqlite?() do
-      sql = "SELECT #{select_user_fields()} FROM users WHERE id = #{id} LIMIT 1"
-
-      case sqlite_rows(sql) do
-        [row | _] -> row_to_user(row)
-        _ -> nil
-      end
-    else
-      case Repo.query("SELECT #{select_user_fields()} FROM users WHERE id = $1 LIMIT 1", [id]) do
-        {:ok, %{rows: [row | _]}} -> row_to_user(row)
-        _ -> nil
-      end
+    case Repo.query("SELECT #{select_user_fields()} FROM users WHERE id = $1 LIMIT 1", [id]) do
+      {:ok, %{rows: [row | _]}} -> row_to_user(row)
+      _ -> nil
     end
   end
 
-  defp user_by_id(_), do: nil
+  defp user_by_id(_) do
+    nil
+  end
 
   defp user_by_name(name) when is_binary(name) and name != "" do
-    if use_sqlite?() do
-      escaped = escape_sqlite_string(name)
-
-      sql =
-        "SELECT #{select_user_fields()} FROM users WHERE LOWER(name) = LOWER('#{escaped}') LIMIT 1"
-
-      case sqlite_rows(sql) do
-        [row | _] -> row_to_user(row)
-        _ -> nil
-      end
-    else
-      case Repo.query(
-             "SELECT #{select_user_fields()} FROM users WHERE LOWER(name) = LOWER($1) LIMIT 1",
-             [name]
-           ) do
-        {:ok, %{rows: [row | _]}} -> row_to_user(row)
-        _ -> nil
-      end
+    case Repo.query(
+           "SELECT #{select_user_fields()} FROM users WHERE LOWER(name) = LOWER($1) LIMIT 1",
+           [name]
+         ) do
+      {:ok, %{rows: [row | _]}} -> row_to_user(row)
+      _ -> nil
     end
   end
 
-  defp user_by_name(_), do: nil
+  defp user_by_name(_) do
+    nil
+  end
 
   defp row_to_user([id, name, class_name, passhash, email, join_date]) do
     %{
@@ -818,270 +837,98 @@ defmodule ShimmiePhoenix.Site.Users do
     columns = user_columns()
 
     class_expr =
-      if MapSet.member?(columns, "class"), do: "COALESCE(class, 'user')", else: "'user'"
+      if MapSet.member?(columns, "class") do
+        "COALESCE(class, 'user')"
+      else
+        "'user'"
+      end
 
-    pass_expr = if MapSet.member?(columns, "pass"), do: "COALESCE(\"pass\", '')", else: "''"
-    email_expr = if MapSet.member?(columns, "email"), do: "email", else: "NULL"
+    pass_expr =
+      if MapSet.member?(columns, "pass") do
+        "COALESCE(\"pass\", '')"
+      else
+        "''"
+      end
+
+    email_expr =
+      if MapSet.member?(columns, "email") do
+        "email"
+      else
+        "NULL"
+      end
 
     join_expr =
-      if MapSet.member?(columns, "joindate"),
-        do: "COALESCE(CAST(joindate AS TEXT), '')",
-        else: "''"
+      if MapSet.member?(columns, "joindate") do
+        "COALESCE(CAST(joindate AS TEXT), '')"
+      else
+        "''"
+      end
 
     "id, name, #{class_expr} AS class, #{pass_expr} AS passhash, #{email_expr} AS email, #{join_expr} AS joindate"
   end
 
   defp user_columns do
-    if use_sqlite?() do
-      case sqlite_rows("PRAGMA table_info(users)") do
-        [] ->
-          MapSet.new(["id", "name", "class"])
+    case Repo.query(
+           "SELECT column_name FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'users'",
+           []
+         ) do
+      {:ok, %{rows: rows}} when rows != [] ->
+        rows
+        |> Enum.map(fn [value] -> to_string(value) end)
+        |> MapSet.new()
 
-        rows ->
-          rows
-          |> Enum.map(fn row -> Enum.at(row, 1) |> to_string() end)
-          |> MapSet.new()
-      end
-    else
-      case Repo.query(
-             "SELECT column_name FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'users'",
-             []
-           ) do
-        {:ok, %{rows: rows}} when rows != [] ->
-          rows
-          |> Enum.map(fn [value] -> to_string(value) end)
-          |> MapSet.new()
-
-        _ ->
-          MapSet.new(["id", "name", "class"])
-      end
+      _ ->
+        MapSet.new(["id", "name", "class"])
     end
   end
 
   defp insert_user(cols, vals) do
-    if use_sqlite?() do
-      sql =
-        "INSERT INTO users(#{Enum.join(cols, ", ")}) VALUES (" <>
-          Enum.map_join(vals, ", ", &sqlite_literal/1) <> ")"
+    placeholders =
+      1..length(vals)
+      |> Enum.map_join(", ", &"$#{&1}")
 
-      sqlite_exec(sql)
-    else
-      placeholders =
-        1..length(vals)
-        |> Enum.map_join(", ", &"$#{&1}")
-
-      sql = "INSERT INTO users(#{Enum.join(cols, ", ")}) VALUES (#{placeholders})"
-      Repo.query(sql, vals)
-    end
+    sql = "INSERT INTO users(#{Enum.join(cols, ", ")}) VALUES (#{placeholders})"
+    Repo.query(sql, vals)
   end
 
   defp update_user_name(id, name) do
-    if use_sqlite?() do
-      sqlite_exec("UPDATE users SET name = #{sqlite_literal(name)} WHERE id = #{id}")
-    else
-      Repo.query("UPDATE users SET name = $1 WHERE id = $2", [name, id])
-    end
+    Repo.query("UPDATE users SET name = $1 WHERE id = $2", [name, id])
   end
 
   defp update_user_password(id, hash) do
-    if use_sqlite?() do
-      sqlite_exec("UPDATE users SET pass = #{sqlite_literal(hash)} WHERE id = #{id}")
-    else
-      Repo.query("UPDATE users SET pass = $1 WHERE id = $2", [hash, id])
-    end
+    Repo.query("UPDATE users SET pass = $1 WHERE id = $2", [hash, id])
   end
 
   defp update_user_email(id, address) do
-    if use_sqlite?() do
-      sqlite_exec("UPDATE users SET email = #{sqlite_literal(address)} WHERE id = #{id}")
-    else
-      Repo.query("UPDATE users SET email = $1 WHERE id = $2", [address, id])
-    end
+    Repo.query("UPDATE users SET email = $1 WHERE id = $2", [address, id])
   end
 
   defp update_user_class(id, class_name) do
-    if use_sqlite?() do
-      sqlite_exec("UPDATE users SET class = #{sqlite_literal(class_name)} WHERE id = #{id}")
-    else
-      Repo.query("UPDATE users SET class = $1 WHERE id = $2", [class_name, id])
-    end
+    Repo.query("UPDATE users SET class = $1 WHERE id = $2", [class_name, id])
   end
 
   defp delete_user_images(user_id) do
-    if use_sqlite?() do
-      sqlite_exec("DELETE FROM images WHERE owner_id = #{user_id}")
-    else
-      Repo.query("DELETE FROM images WHERE owner_id = $1", [user_id])
-    end
+    Repo.query("DELETE FROM images WHERE owner_id = $1", [user_id])
   end
 
   defp reassign_user_images(user_id, anon_id) do
-    if use_sqlite?() do
-      sqlite_exec("UPDATE images SET owner_id = #{anon_id} WHERE owner_id = #{user_id}")
-    else
-      Repo.query("UPDATE images SET owner_id = $1 WHERE owner_id = $2", [anon_id, user_id])
-    end
+    Repo.query("UPDATE images SET owner_id = $1 WHERE owner_id = $2", [anon_id, user_id])
   end
 
   defp delete_user_comments(user_id) do
-    if use_sqlite?() do
-      sqlite_exec("DELETE FROM comments WHERE owner_id = #{user_id}")
-    else
-      Repo.query("DELETE FROM comments WHERE owner_id = $1", [user_id])
-    end
+    Repo.query("DELETE FROM comments WHERE owner_id = $1", [user_id])
   end
 
   defp reassign_user_comments(user_id, anon_id) do
-    if use_sqlite?() do
-      sqlite_exec("UPDATE comments SET owner_id = #{anon_id} WHERE owner_id = #{user_id}")
-    else
-      Repo.query("UPDATE comments SET owner_id = $1 WHERE owner_id = $2", [anon_id, user_id])
-    end
+    Repo.query("UPDATE comments SET owner_id = $1 WHERE owner_id = $2", [anon_id, user_id])
   end
 
   defp delete_user_favorites(user_id) do
-    if use_sqlite?() do
-      sqlite_exec("DELETE FROM user_favorites WHERE user_id = #{user_id}")
-    else
-      Repo.query("DELETE FROM user_favorites WHERE user_id = $1", [user_id])
-    end
+    Repo.query("DELETE FROM user_favorites WHERE user_id = $1", [user_id])
   end
 
   defp delete_user_row(user_id) do
-    if use_sqlite?() do
-      sqlite_exec("DELETE FROM users WHERE id = #{user_id}")
-    else
-      Repo.query("DELETE FROM users WHERE id = $1", [user_id])
-    end
-  end
-
-  defp sqlite_user_filters(params, columns) do
-    r_id = parse_positive(params["r_id"], 0)
-    r_name = params |> Map.get("r_name", "") |> to_string() |> String.trim()
-    r_email = params |> Map.get("r_email", "") |> to_string() |> String.trim()
-    r_class = params |> Map.get("r_class", "") |> to_string() |> String.trim()
-    r_dates = normalize_joindate(params["r_joindate"])
-    sort = normalize_sort(params["r__sort"], columns)
-
-    clauses = []
-
-    clauses = if r_id > 0, do: clauses ++ ["id = #{r_id}"], else: clauses
-
-    clauses =
-      if r_name != "" do
-        pattern = "%" <> escape_like(r_name) <> "%"
-        clauses ++ ["LOWER(name) LIKE LOWER('#{escape_sqlite_string(pattern)}') ESCAPE '\\'"]
-      else
-        clauses
-      end
-
-    clauses =
-      if MapSet.member?(columns, "email") and r_email != "" do
-        pattern = "%" <> escape_like(r_email) <> "%"
-        clauses ++ ["LOWER(email) LIKE LOWER('#{escape_sqlite_string(pattern)}') ESCAPE '\\'"]
-      else
-        clauses
-      end
-
-    clauses =
-      if MapSet.member?(columns, "class") and r_class != "" do
-        clauses ++ ["class = '#{escape_sqlite_string(r_class)}'"]
-      else
-        clauses
-      end
-
-    clauses =
-      if MapSet.member?(columns, "joindate") and r_dates.from != "" do
-        clauses ++ ["DATE(joindate) >= DATE('#{escape_sqlite_string(r_dates.from)}')"]
-      else
-        clauses
-      end
-
-    clauses =
-      if MapSet.member?(columns, "joindate") and r_dates.to != "" do
-        clauses ++ ["DATE(joindate) <= DATE('#{escape_sqlite_string(r_dates.to)}')"]
-      else
-        clauses
-      end
-
-    where_sql =
-      case clauses do
-        [] -> ""
-        _ -> " WHERE " <> Enum.join(clauses, " AND ")
-      end
-
-    {where_sql, sort}
-  end
-
-  defp sqlite_count(sql) do
-    case sqlite_rows(sql) do
-      [[value] | _] -> parse_positive(value, 0)
-      _ -> 0
-    end
-  end
-
-  defp use_sqlite? do
-    case Site.sqlite_db_path() do
-      nil -> false
-      path -> File.exists?(path)
-    end
-  end
-
-  defp active_backend, do: if(use_sqlite?(), do: "sqlite", else: "repo")
-
-  defp sqlite_db_path! do
-    case Site.sqlite_db_path() do
-      nil -> raise "sqlite DB path is not configured"
-      path -> path
-    end
-  end
-
-  defp sqlite_rows(sql) do
-    args = [
-      "-noheader",
-      "-separator",
-      @sqlite_separator,
-      "-newline",
-      @sqlite_row_separator,
-      sqlite_db_path!(),
-      sql
-    ]
-
-    case System.cmd("sqlite3", args, stderr_to_stdout: true) do
-      {output, 0} ->
-        output
-        |> String.split(@sqlite_row_separator, trim: true)
-        |> Enum.map(fn line -> String.split(line, @sqlite_separator) end)
-
-      {error, _} ->
-        Logger.warning("auth.sqlite query failed: #{String.trim(error)}")
-        []
-    end
-  end
-
-  defp sqlite_exec(sql) do
-    case ShimmiePhoenix.Mutation.sqlite_exec(sqlite_db_path!(), sql) do
-      :ok -> {:ok, :done}
-      error -> error
-    end
-  end
-
-  defp sqlite_literal(nil), do: "NULL"
-  defp sqlite_literal(value) when is_integer(value), do: Integer.to_string(value)
-  defp sqlite_literal(value) when is_float(value), do: Float.to_string(value)
-
-  defp sqlite_literal(%NaiveDateTime{} = value),
-    do: "'#{value |> NaiveDateTime.to_string() |> escape_sqlite_string()}'"
-
-  defp sqlite_literal(value), do: "'#{escape_sqlite_string(to_string(value))}'"
-
-  defp escape_sqlite_string(value), do: String.replace(value, "'", "''")
-
-  defp escape_like(value) do
-    value
-    |> String.replace("\\", "\\\\")
-    |> String.replace("%", "\\%")
-    |> String.replace("_", "\\_")
+    Repo.query("DELETE FROM users WHERE id = $1", [user_id])
   end
 
   defp validate_username(name) do
@@ -1100,7 +947,9 @@ defmodule ShimmiePhoenix.Site.Users do
     end
   end
 
-  defp validate_passwords(pass1, pass2), do: PasswordPolicy.validate(pass1, pass2)
+  defp validate_passwords(pass1, pass2) do
+    PasswordPolicy.validate(pass1, pass2)
+  end
 
   defp validate_email_requirement(email) do
     if user_email_required?() and email == "" do
@@ -1110,7 +959,9 @@ defmodule ShimmiePhoenix.Site.Users do
     end
   end
 
-  defp validate_email(""), do: :ok
+  defp validate_email("") do
+    :ok
+  end
 
   defp validate_email(address) do
     if Regex.match?(~r/^[^@\s]+@[^@\s]+\.[^@\s]+$/, to_string(address)) do
@@ -1121,7 +972,11 @@ defmodule ShimmiePhoenix.Site.Users do
   end
 
   defp ensure_username_available(name) do
-    if is_nil(user_by_name(name)), do: :ok, else: {:error, :username_taken}
+    if is_nil(user_by_name(name)) do
+      :ok
+    else
+      {:error, :username_taken}
+    end
   end
 
   defp ensure_username_available_for(name, id) do
@@ -1142,9 +997,11 @@ defmodule ShimmiePhoenix.Site.Users do
   end
 
   defp ensure_admin(actor) do
-    if actor && normalize_class(actor.class) == "admin",
-      do: :ok,
-      else: {:error, :permission_denied}
+    if actor && normalize_class(actor.class) == "admin" do
+      :ok
+    else
+      {:error, :permission_denied}
+    end
   end
 
   defp valid_password?(%{name: name, passhash: passhash}, pass) when is_binary(passhash) do
@@ -1167,28 +1024,27 @@ defmodule ShimmiePhoenix.Site.Users do
     _ -> false
   end
 
-  defp valid_password?(_, _), do: false
+  defp valid_password?(_, _) do
+    false
+  end
 
-  defp upgrade_legacy_password(%{passhash: "$2" <> _} = user, _pass), do: {:ok, user}
+  defp upgrade_legacy_password(%{passhash: "$2" <> _} = user, _pass) do
+    {:ok, user}
+  end
 
-  defp upgrade_legacy_password(_user, pass) when byte_size(pass) > 72,
-    do: {:error, :password_upgrade_required}
+  defp upgrade_legacy_password(_user, pass) when byte_size(pass) > 72 do
+    {:error, :password_upgrade_required}
+  end
 
   defp upgrade_legacy_password(user, pass) do
     hash = Bcrypt.hash_pwd_salt(pass)
 
     result =
-      if use_sqlite?() do
-        sqlite_exec(
-          "UPDATE users SET pass=#{sqlite_literal(hash)} WHERE id=#{user.id} AND pass=#{sqlite_literal(user.passhash)}"
-        )
-      else
-        Repo.query("UPDATE users SET pass=$1 WHERE id=$2 AND pass=$3", [
-          hash,
-          user.id,
-          user.passhash
-        ])
-      end
+      Repo.query("UPDATE users SET pass=$1 WHERE id=$2 AND pass=$3", [
+        hash,
+        user.id,
+        user.passhash
+      ])
 
     with {:ok, _} <- result,
          %{passhash: ^hash} = refreshed <- user_by_id(user.id) do
@@ -1198,8 +1054,13 @@ defmodule ShimmiePhoenix.Site.Users do
     end
   end
 
-  defp normalize_bcrypt_hash("$2y$" <> rest), do: "$2b$" <> rest
-  defp normalize_bcrypt_hash(value), do: value
+  defp normalize_bcrypt_hash("$2y$" <> rest) do
+    "$2b$" <> rest
+  end
+
+  defp normalize_bcrypt_hash(value) do
+    value
+  end
 
   defp valid_session?(user, "v2." <> token, remote_ip) do
     with true <- valid_proof?(user, token, @legacy_salt),
@@ -1211,7 +1072,9 @@ defmodule ShimmiePhoenix.Site.Users do
     end
   end
 
-  defp valid_session?(_, _, _), do: false
+  defp valid_session?(_, _, _) do
+    false
+  end
 
   defp masked_session_ip(remote_ip) do
     case {parse_ip(remote_ip), parse_ip(session_hash_mask())} do
@@ -1235,13 +1098,17 @@ defmodule ShimmiePhoenix.Site.Users do
     |> :inet.parse_address()
   end
 
-  defp ip_to_binary({a, b, c, d}), do: <<a, b, c, d>>
+  defp ip_to_binary({a, b, c, d}) do
+    <<a, b, c, d>>
+  end
 
   defp ip_to_binary({a, b, c, d, e, f, g, h}) do
     <<a::16, b::16, c::16, d::16, e::16, f::16, g::16, h::16>>
   end
 
-  defp ip_to_binary(_), do: <<>>
+  defp ip_to_binary(_) do
+    <<>>
+  end
 
   defp binary_to_ip(<<a, b, c, d>>) do
     {a, b, c, d} |> :inet.ntoa() |> to_string()
@@ -1251,7 +1118,9 @@ defmodule ShimmiePhoenix.Site.Users do
     {a, b, c, d, e, f, g, h} |> :inet.ntoa() |> to_string()
   end
 
-  defp binary_to_ip(_), do: "0.0.0.0"
+  defp binary_to_ip(_) do
+    "0.0.0.0"
+  end
 
   defp binary_and(left, right) do
     left_list = :binary.bin_to_list(left)
@@ -1262,7 +1131,9 @@ defmodule ShimmiePhoenix.Site.Users do
     |> :erlang.list_to_binary()
   end
 
-  defp md5_hex(value), do: :crypto.hash(:md5, value) |> Base.encode16(case: :lower)
+  defp md5_hex(value) do
+    :crypto.hash(:md5, value) |> Base.encode16(case: :lower)
+  end
 
   defp parse_positive(value, default) do
     case Integer.parse(to_string(value || "")) do
@@ -1279,7 +1150,14 @@ defmodule ShimmiePhoenix.Site.Users do
   end
 
   defp config_bool(key, default) do
-    case Store.get_config(key, if(default, do: "Y", else: "N"))
+    case Store.get_config(
+           key,
+           if(default) do
+             "Y"
+           else
+             "N"
+           end
+         )
          |> to_string()
          |> String.downcase() do
       value when value in ["1", "y", "yes", "true", "on"] -> true
@@ -1301,7 +1179,15 @@ defmodule ShimmiePhoenix.Site.Users do
     |> String.downcase()
   end
 
-  defp normalize_nullable_string(nil), do: nil
-  defp normalize_nullable_string(""), do: ""
-  defp normalize_nullable_string(value), do: to_string(value)
+  defp normalize_nullable_string(nil) do
+    nil
+  end
+
+  defp normalize_nullable_string("") do
+    ""
+  end
+
+  defp normalize_nullable_string(value) do
+    to_string(value)
+  end
 end

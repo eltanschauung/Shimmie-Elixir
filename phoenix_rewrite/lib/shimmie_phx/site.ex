@@ -1,16 +1,22 @@
 defmodule ShimmiePhoenix.Site do
-  @moduledoc """
-  Compatibility helpers for reading the legacy Shimmie2 deployment layout.
-  """
+  @moduledoc "Compatibility helpers for reading the legacy Shimmie2 deployment layout.\r\n"
 
   @define_re_template ~r/define\(\s*['"]%KEY%['"]\s*,\s*([^)]+)\)/
   @cache_table :shimmie_legacy_cache
   alias ShimmiePhoenix.Cache
   alias ShimmiePhoenix.DatabaseURL
 
-  def legacy_root, do: Application.get_env(:shimmie_phx, :legacy_root)
-  def legacy_assets_dir, do: Application.get_env(:shimmie_phx, :legacy_assets_dir)
-  def legacy_config_path, do: Application.get_env(:shimmie_phx, :legacy_config_path)
+  def legacy_root do
+    Application.get_env(:shimmie_phx, :legacy_root)
+  end
+
+  def legacy_assets_dir do
+    Application.get_env(:shimmie_phx, :legacy_assets_dir)
+  end
+
+  def legacy_config_path do
+    Application.get_env(:shimmie_phx, :legacy_config_path)
+  end
 
   def database_url_source do
     cond do
@@ -48,28 +54,6 @@ defmodule ShimmiePhoenix.Site do
     case Integer.parse(value || "") do
       {n, ""} when n >= 0 -> n
       _ -> 1
-    end
-  end
-
-  def sqlite_db_path do
-    # A legacy SQLite file must not divert contexts away from the explicitly
-    # configured PostgreSQL Repo, even if that stale file exists on disk.
-    if DatabaseURL.explicit_url(), do: nil, else: legacy_sqlite_db_path()
-  end
-
-  defp legacy_sqlite_db_path do
-    case legacy_dsn() do
-      "sqlite:" <> rest ->
-        rel_or_abs = String.trim(rest)
-
-        cond do
-          rel_or_abs == "" -> nil
-          Path.type(rel_or_abs) == :absolute -> rel_or_abs
-          true -> Path.expand(rel_or_abs, legacy_root())
-        end
-
-      _ ->
-        nil
     end
   end
 
@@ -153,7 +137,15 @@ defmodule ShimmiePhoenix.Site do
     |> unquote_if_quoted()
   end
 
-  defp unquote_if_quoted("'" <> rest), do: String.trim_trailing(rest, "'")
-  defp unquote_if_quoted("\"" <> rest), do: String.trim_trailing(rest, "\"")
-  defp unquote_if_quoted(value), do: value
+  defp unquote_if_quoted("'" <> rest) do
+    String.trim_trailing(rest, "'")
+  end
+
+  defp unquote_if_quoted("\"" <> rest) do
+    String.trim_trailing(rest, "\"")
+  end
+
+  defp unquote_if_quoted(value) do
+    value
+  end
 end

@@ -52,7 +52,7 @@ defmodule ShimmiePhoenix.BackendSelectionTest do
     System.put_env("DATABASE_URL", url)
     assert Site.database_url() == url
     assert Site.database_url_source() == :env_url
-    assert Site.sqlite_db_path() == nil
+    refute function_exported?(Site, :sqlite_db_path, 0)
     assert Site.secret() == "synthetic-stable-secret"
   end
 
@@ -61,7 +61,7 @@ defmodule ShimmiePhoenix.BackendSelectionTest do
     System.put_env("SHIMMIE_DATABASE_URL", url)
     System.put_env("SHIMMIE_LEGACY_DSN", "sqlite:another.sqlite")
     assert Site.database_url() == url
-    assert Site.sqlite_db_path() == nil
+    refute function_exported?(Site, :sqlite_db_path, 0)
   end
 
   test "runtime configuration and helpers use the same URL precedence in dev and prod" do
@@ -78,24 +78,19 @@ defmodule ShimmiePhoenix.BackendSelectionTest do
 
       assert config[:shimmie_phx][ShimmiePhoenix.Repo][:url] == primary
       assert Site.database_url() == primary
-      assert Site.sqlite_db_path() == nil
+      refute function_exported?(Site, :sqlite_db_path, 0)
     end
   end
 
-  test "legacy-only SQLite remains available with relative and absolute paths", %{root: root} do
-    assert Site.database_url() == nil
-    assert Site.database_url_source() == :php_config
-    assert Site.sqlite_db_path() == Path.join(root, "empty.sqlite")
-    absolute = Path.join(root, "explicit.sqlite")
-    System.put_env("SHIMMIE_LEGACY_DSN", "sqlite:" <> absolute)
-    assert Site.sqlite_db_path() == absolute
-    assert Site.database_url_source() == :env_dsn
+  test "SQLite selectors and allocators are no longer exposed" do
+    refute function_exported?(Site, :sqlite_db_path, 0)
+    refute function_exported?(ShimmiePhoenix.IDAllocator, :next_sqlite!, 2)
   end
 
   test "legacy-only PostgreSQL remains supported" do
     System.put_env("SHIMMIE_LEGACY_DSN", "pgsql:host=localhost;user=dummy;dbname=synthetic")
     assert Site.database_url() == "ecto://dummy@localhost/synthetic"
-    assert Site.sqlite_db_path() == nil
+    refute function_exported?(Site, :sqlite_db_path, 0)
   end
 
   for variable <- ~w(DATABASE_URL SHIMMIE_DATABASE_URL) do

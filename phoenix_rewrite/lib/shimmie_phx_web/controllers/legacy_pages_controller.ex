@@ -30,7 +30,11 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     {threads, total_count} = Pages.list_comment_threads(page, per_page, current_user)
 
     conn =
-      if current_user, do: put_resp_header(conn, "cache-control", "private, no-store"), else: conn
+      if current_user do
+        put_resp_header(conn, "cache-control", "private, no-store")
+      else
+        conn
+      end
 
     total_pages = max(1, div(total_count + per_page - 1, per_page))
     current_page = min(page, total_pages)
@@ -55,9 +59,18 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
       page: current_page,
       total_pages: total_pages,
       paginator_items: paginator_items(current_page, total_pages),
-      prev_path: if(current_page > 1, do: "/comment/list/#{current_page - 1}", else: nil),
+      prev_path:
+        if(current_page > 1) do
+          "/comment/list/#{current_page - 1}"
+        else
+          nil
+        end,
       next_path:
-        if(current_page < total_pages, do: "/comment/list/#{current_page + 1}", else: nil)
+        if(current_page < total_pages) do
+          "/comment/list/#{current_page + 1}"
+        else
+          nil
+        end
     )
   end
 
@@ -180,7 +193,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     end
   end
 
-  def tags_root(conn, _params), do: redirect(conn, to: "/tags/map")
+  def tags_root(conn, _params) do
+    redirect(conn, to: "/tags/map")
+  end
 
   def tags(conn, %{"sub" => "map"} = params) do
     starts_with = params["starts_with"]
@@ -210,7 +225,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     |> render(:tags_popularity, groups: groups)
   end
 
-  def tags(conn, %{"sub" => _}), do: send_resp(conn, 404, "Not Found")
+  def tags(conn, %{"sub" => _}) do
+    send_resp(conn, 404, "Not Found")
+  end
 
   def auto_tag_list(conn, params) do
     current_user = conn.assigns[:legacy_user] || Users.current_user(conn)
@@ -219,7 +236,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     |> assign(:page_title, "#{Pages.site_title()} - Auto-Tag")
     |> assign(:has_left_nav, true)
     |> render(:auto_tag_list,
-      rows: Pages.list_auto_tags(1_000),
+      rows: Pages.list_auto_tags(1000),
       can_manage?: can_manage_tag_lists?(current_user),
       notice: params["notice"],
       error: params["error"]
@@ -283,7 +300,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     |> assign(:page_title, "#{Pages.site_title()} - Aliases")
     |> assign(:has_left_nav, true)
     |> render(:alias_list,
-      rows: Pages.list_aliases(1_000),
+      rows: Pages.list_aliases(1000),
       can_manage?: can_manage_tag_lists?(current_user),
       notice: params["notice"],
       error: params["error"]
@@ -340,7 +357,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     end
   end
 
-  def help_root(conn, _params), do: redirect(conn, to: "/help/#{Help.first_topic()}")
+  def help_root(conn, _params) do
+    redirect(conn, to: "/help/#{Help.first_topic()}")
+  end
 
   def help_topic(conn, %{"topic" => topic}) do
     current_user = conn.assigns[:legacy_user] || Users.current_user(conn)
@@ -406,7 +425,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
   def setup(conn, params) do
     with {:ok, user} <- current_user(conn),
          true <- admin?(user) do
-      entries = Pages.list_config_entries(2_000)
+      entries = Pages.list_config_entries(2000)
       theme_options = Pages.available_themes()
       setup_sections = build_setup_sections(entries, theme_options)
 
@@ -453,19 +472,15 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     with {:ok, user} <- current_user(conn),
          true <- admin?(user) do
       selected_name = params["name"] |> to_string() |> String.trim()
-      allowed_names = Pages.list_config_entries(2_000) |> Enum.map(& &1.name)
+      allowed_names = Pages.list_config_entries(2000) |> Enum.map(& &1.name)
       selected_value = normalize_form_value(params["value"])
 
       cond do
         selected_name == "" ->
-          redirect(conn,
-            to: "/setup?error=" <> URI.encode_www_form("Setting name is required")
-          )
+          redirect(conn, to: "/setup?error=" <> URI.encode_www_form("Setting name is required"))
 
         selected_name not in allowed_names ->
-          redirect(conn,
-            to: "/setup?error=" <> URI.encode_www_form("Unknown setting selected")
-          )
+          redirect(conn, to: "/setup?error=" <> URI.encode_www_form("Unknown setting selected"))
 
         Store.put_config(selected_name, selected_value) == :ok ->
           redirect(conn,
@@ -475,9 +490,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
           )
 
         true ->
-          redirect(conn,
-            to: "/setup?error=" <> URI.encode_www_form("Unable to save setting")
-          )
+          redirect(conn, to: "/setup?error=" <> URI.encode_www_form("Unable to save setting"))
       end
     else
       _ -> send_resp(conn, 403, "Permission Denied")
@@ -492,24 +505,16 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
 
       cond do
         selected_theme == "" ->
-          redirect(conn,
-            to: "/setup?error=" <> URI.encode_www_form("Theme is required")
-          )
+          redirect(conn, to: "/setup?error=" <> URI.encode_www_form("Theme is required"))
 
         selected_theme not in allowed_themes ->
-          redirect(conn,
-            to: "/setup?error=" <> URI.encode_www_form("Unknown theme selected")
-          )
+          redirect(conn, to: "/setup?error=" <> URI.encode_www_form("Unknown theme selected"))
 
         Store.put_config("theme", selected_theme) == :ok ->
-          redirect(conn,
-            to: "/setup?notice=" <> URI.encode_www_form("Theme updated")
-          )
+          redirect(conn, to: "/setup?notice=" <> URI.encode_www_form("Theme updated"))
 
         true ->
-          redirect(conn,
-            to: "/setup?error=" <> URI.encode_www_form("Unable to save theme")
-          )
+          redirect(conn, to: "/setup?error=" <> URI.encode_www_form("Unable to save theme"))
       end
     else
       _ -> send_resp(conn, 403, "Permission Denied")
@@ -527,7 +532,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     end
   end
 
-  def admin_permissions(conn, _params), do: redirect(conn, to: "/permissions")
+  def admin_permissions(conn, _params) do
+    redirect(conn, to: "/permissions")
+  end
 
   def permissions(conn, params) do
     with {:ok, user} <- current_user(conn),
@@ -650,15 +657,17 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
         total_pages: page_data.total_pages,
         paginator_items: paginator_items(page_data.page, page_data.total_pages),
         prev_path:
-          if(page_data.page > 1,
-            do: ip_ban_list_path(prev_page, limit, include_all?),
-            else: nil
-          ),
+          if(page_data.page > 1) do
+            ip_ban_list_path(prev_page, limit, include_all?)
+          else
+            nil
+          end,
         next_path:
-          if(page_data.page < page_data.total_pages,
-            do: ip_ban_list_path(next_page, limit, include_all?),
-            else: nil
-          ),
+          if(page_data.page < page_data.total_pages) do
+            ip_ban_list_path(next_page, limit, include_all?)
+          else
+            nil
+          end,
         limit: limit,
         include_all?: include_all?,
         active_path: "/ip_ban/list?r__size=1000000",
@@ -760,8 +769,18 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
       |> render(:source_history,
         heading: "Global Source History",
         entries: entries,
-        prev_path: if(page > 1, do: "/source_history/all/#{page - 1}", else: nil),
-        next_path: if(has_next?, do: "/source_history/all/#{page + 1}", else: nil)
+        prev_path:
+          if(page > 1) do
+            "/source_history/all/#{page - 1}"
+          else
+            nil
+          end,
+        next_path:
+          if(has_next?) do
+            "/source_history/all/#{page + 1}"
+          else
+            nil
+          end
       )
     else
       _ -> send_resp(conn, 403, "Permission Denied")
@@ -798,8 +817,18 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
       |> render(:tag_history,
         heading: "Global Tag History",
         entries: entries,
-        prev_path: if(page > 1, do: "/tag_history/all/#{page - 1}", else: nil),
-        next_path: if(has_next?, do: "/tag_history/all/#{page + 1}", else: nil)
+        prev_path:
+          if(page > 1) do
+            "/tag_history/all/#{page - 1}"
+          else
+            nil
+          end,
+        next_path:
+          if(has_next?) do
+            "/tag_history/all/#{page + 1}"
+          else
+            nil
+          end
       )
     else
       _ -> send_resp(conn, 403, "Permission Denied")
@@ -837,7 +866,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     end
   end
 
-  def user_admin_root(conn, _params), do: redirect(conn, to: "/user_admin/login")
+  def user_admin_root(conn, _params) do
+    redirect(conn, to: "/user_admin/login")
+  end
 
   def login(conn, params) do
     current_user = conn.assigns[:legacy_user] || Users.current_user(conn)
@@ -911,7 +942,12 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
           biography: UserProfile.biography(display_user.id),
           can_edit_bio?: can_edit_bio?,
           can_view_ips?: can_view_ips?,
-          ip_history: if(can_view_ips?, do: UserProfile.ip_history(display_user), else: nil),
+          ip_history:
+            if(can_view_ips?) do
+              UserProfile.ip_history(display_user)
+            else
+              nil
+            end,
           can_read_pm?: PrivateMessages.can_read?(current_user),
           can_send_pm?:
             PrivateMessages.can_send?(current_user) && current_user &&
@@ -921,7 +957,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     end
   end
 
-  def user_config(conn, params), do: user(conn, params)
+  def user_config(conn, params) do
+    user(conn, params)
+  end
 
   def biography_save(conn, %{"biography" => biography}) do
     with {:ok, user} <- current_user(conn) do
@@ -940,14 +978,21 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     end
   end
 
-  def biography_save(conn, _params), do: send_resp(conn, 400, "Bad Request")
+  def biography_save(conn, _params) do
+    send_resp(conn, 400, "Bad Request")
+  end
 
   def pm_read(conn, %{"pm_id" => pm_id}) do
     with {:ok, user} <- current_user(conn),
          true <- PrivateMessages.can_read?(user),
          {id, ""} <- Integer.parse(to_string(pm_id)),
          {:ok, pm} <- PrivateMessages.get_visible(id, user) do
-      _ = if(pm.to_id == user.id, do: PrivateMessages.mark_read(id), else: :ok)
+      _ =
+        if(pm.to_id == user.id) do
+          PrivateMessages.mark_read(id)
+        else
+          :ok
+        end
 
       conn
       |> assign(:page_title, "Private Message")
@@ -1081,12 +1126,13 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     end
   end
 
-  def login_post(conn, _params),
-    do:
-      redirect(conn, to: "/user_admin/login?error=" <> URI.encode_www_form("Missing credentials"))
+  def login_post(conn, _params) do
+    redirect(conn, to: "/user_admin/login?error=" <> URI.encode_www_form("Missing credentials"))
+  end
 
-  def recover(conn, _params),
-    do: send_resp(conn, 503, "Account recovery is unavailable. Contact an administrator.")
+  def recover(conn, _params) do
+    send_resp(conn, 503, "Account recovery is unavailable. Contact an administrator.")
+  end
 
   def create(conn, params) do
     if Users.signup_enabled?() do
@@ -1167,15 +1213,30 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
         sort_paths: sort_paths,
         page: list.page,
         total_pages: list.total_pages,
-        first_path: if(list.page > 1, do: user_list_path(params, 1), else: nil),
-        prev_path: if(list.page > 1, do: user_list_path(params, list.page - 1), else: nil),
+        first_path:
+          if(list.page > 1) do
+            user_list_path(params, 1)
+          else
+            nil
+          end,
+        prev_path:
+          if(list.page > 1) do
+            user_list_path(params, list.page - 1)
+          else
+            nil
+          end,
         next_path:
-          if(list.page < list.total_pages, do: user_list_path(params, list.page + 1), else: nil),
+          if(list.page < list.total_pages) do
+            user_list_path(params, list.page + 1)
+          else
+            nil
+          end,
         last_path:
-          if(list.page < list.total_pages,
-            do: user_list_path(params, list.total_pages),
-            else: nil
-          ),
+          if(list.page < list.total_pages) do
+            user_list_path(params, list.total_pages)
+          else
+            nil
+          end,
         page_links: page_links,
         notice: params["notice"],
         error: params["error"]
@@ -1285,7 +1346,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     end
   end
 
-  def wiki_root(conn, _params), do: redirect(conn, to: "/wiki/Index")
+  def wiki_root(conn, _params) do
+    redirect(conn, to: "/wiki/Index")
+  end
 
   def wiki_show(conn, %{"title" => title}) do
     decoded_title = URI.decode(title)
@@ -1601,7 +1664,14 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
 
   def sitemap_xml(conn, _params) do
     full? = truthy?(Store.get_config("sitemap_generatefull", "0"))
-    max_entries = if(full?, do: 50_000, else: 50)
+
+    max_entries =
+      if(full?) do
+        50000
+      else
+        50
+      end
+
     page_size = min(max_entries, 500)
     posts = collect_sitemap_posts(page_size, max_entries, [])
     base = site_base_url(conn)
@@ -1707,7 +1777,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
           if url == "" do
             []
           else
-            [%{kind: :url, row: parse_row_number(row), order: 10_000, url: url}]
+            [%{kind: :url, row: parse_row_number(row), order: 10000, url: url}]
           end
 
         _ ->
@@ -1729,25 +1799,49 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     %{id: Users.anonymous_id(), class: "anonymous"}
   end
 
-  defp upload_error_message(:duplicate), do: "Duplicate file skipped"
-  defp upload_error_message(:too_large), do: "One or more files exceed upload_size"
+  defp upload_error_message(:duplicate) do
+    "Duplicate file skipped"
+  end
 
-  defp upload_error_message(:empty_upload),
-    do: "One or more uploads were empty or blocked by request size limits"
+  defp upload_error_message(:too_large) do
+    "One or more files exceed upload_size"
+  end
 
-  defp upload_error_message(:unsupported_type),
-    do: "One or more files use a blocked or unsupported file type"
+  defp upload_error_message(:empty_upload) do
+    "One or more uploads were empty or blocked by request size limits"
+  end
 
-  defp upload_error_message(:invalid_upload), do: "Invalid upload payload"
+  defp upload_error_message(:unsupported_type) do
+    "One or more files use a blocked or unsupported file type"
+  end
 
-  defp upload_error_message(:invalid_source),
-    do: "Source must be a valid HTTP(S) URL or plain text"
+  defp upload_error_message(:invalid_upload) do
+    "Invalid upload payload"
+  end
 
-  defp upload_error_message(:invalid_url), do: "One or more URL uploads were invalid"
-  defp upload_error_message(:transload_disabled), do: "URL uploads are disabled in board settings"
-  defp upload_error_message(:transload_failed), do: "One or more URL uploads could not be fetched"
-  defp upload_error_message(:db_failed), do: "Database insert failed"
-  defp upload_error_message(_), do: "Upload failed"
+  defp upload_error_message(:invalid_source) do
+    "Source must be a valid HTTP(S) URL or plain text"
+  end
+
+  defp upload_error_message(:invalid_url) do
+    "One or more URL uploads were invalid"
+  end
+
+  defp upload_error_message(:transload_disabled) do
+    "URL uploads are disabled in board settings"
+  end
+
+  defp upload_error_message(:transload_failed) do
+    "One or more URL uploads could not be fetched"
+  end
+
+  defp upload_error_message(:db_failed) do
+    "Database insert failed"
+  end
+
+  defp upload_error_message(_) do
+    "Upload failed"
+  end
 
   defp random_widget(conn, search) do
     case Pages.random_post(search) do
@@ -1825,10 +1919,35 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
   defp random_thumb_size(width, height) do
     thumb_width = config_int("thumb_width", 192)
     thumb_height = config_int("thumb_height", 192)
-    w = if width > 0, do: width, else: 192
-    h = if height > 0, do: height, else: 192
-    w = if w > h * 5, do: h * 5, else: w
-    h = if h > w * 5, do: w * 5, else: h
+
+    w =
+      if width > 0 do
+        width
+      else
+        192
+      end
+
+    h =
+      if height > 0 do
+        height
+      else
+        192
+      end
+
+    w =
+      if w > h * 5 do
+        h * 5
+      else
+        w
+      end
+
+    h =
+      if h > w * 5 do
+        w * 5
+      else
+        h
+      end
+
     scale = min(thumb_width / w, thumb_height / h)
 
     {max(1, trunc(w * scale)), max(1, trunc(h * scale))}
@@ -1851,8 +1970,13 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     end
   end
 
-  defp decode_search(nil), do: ""
-  defp decode_search(value), do: value |> to_string() |> URI.decode() |> String.trim()
+  defp decode_search(nil) do
+    ""
+  end
+
+  defp decode_search(value) do
+    value |> to_string() |> URI.decode() |> String.trim()
+  end
 
   defp current_user(conn) do
     case conn.assigns[:legacy_user] || Users.current_user(conn) do
@@ -1877,10 +2001,16 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
       |> String.trim()
       |> String.trim_leading("#")
 
-    if cleaned == "", do: "FF0000", else: cleaned
+    if cleaned == "" do
+      "FF0000"
+    else
+      cleaned
+    end
   end
 
-  defp can_manage_tag_lists?(user), do: TagEdit.can_edit_tags?(user)
+  defp can_manage_tag_lists?(user) do
+    TagEdit.can_edit_tags?(user)
+  end
 
   defp admin?(%{class: class}) do
     class
@@ -1890,7 +2020,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     |> Kernel.==("admin")
   end
 
-  defp admin?(_), do: false
+  defp admin?(_) do
+    false
+  end
 
   defp ip_ban_create_defaults(params, user) do
     %{
@@ -1968,8 +2100,13 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     "/ip_ban/list?" <> query
   end
 
-  defp maybe_put_r_all(params, true), do: Map.put(params, "r_all", "on")
-  defp maybe_put_r_all(params, _), do: params
+  defp maybe_put_r_all(params, true) do
+    Map.put(params, "r_all", "on")
+  end
+
+  defp maybe_put_r_all(params, _) do
+    params
+  end
 
   defp truthy?(value) do
     value
@@ -2013,7 +2150,12 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
   end
 
   defp site_base_url(conn) do
-    default_port = if conn.scheme == :https, do: 443, else: 80
+    default_port =
+      if conn.scheme == :https do
+        443
+      else
+        80
+      end
 
     if conn.port == default_port do
       "#{conn.scheme}://#{conn.host}"
@@ -2022,7 +2164,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     end
   end
 
-  defp sitemap_url_xml(url), do: sitemap_url_xml(url, nil)
+  defp sitemap_url_xml(url) do
+    sitemap_url_xml(url, nil)
+  end
 
   defp sitemap_url_xml(url, lastmod) do
     lastmod_value = sitemap_lastmod(lastmod)
@@ -2034,8 +2178,13 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     end
   end
 
-  defp sitemap_lastmod(nil), do: nil
-  defp sitemap_lastmod(""), do: nil
+  defp sitemap_lastmod(nil) do
+    nil
+  end
+
+  defp sitemap_lastmod("") do
+    nil
+  end
 
   defp sitemap_lastmod(value) do
     text = to_string(value)
@@ -2123,16 +2272,15 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
   end
 
   defp private_api_cache(conn) do
-    if conn.assigns[:legacy_user] || Users.current_user(conn),
-      do: put_resp_header(conn, "cache-control", "private, no-store"),
-      else: conn
+    if conn.assigns[:legacy_user] || Users.current_user(conn) do
+      put_resp_header(conn, "cache-control", "private, no-store")
+    else
+      conn
+    end
   end
 
   defp posts_by_md5(md5s, actor) do
-    case sqlite_path() do
-      nil -> posts_by_md5_repo(md5s, actor)
-      path -> posts_by_md5_sqlite(path, md5s, actor)
-    end
+    posts_by_md5_repo(md5s, actor)
   end
 
   defp posts_by_md5_repo(md5s, actor) do
@@ -2140,9 +2288,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     |> Enum.flat_map(fn md5 ->
       case Repo.query(
              "SELECT id FROM images WHERE LOWER(hash) = LOWER($1) ORDER BY id DESC LIMIT 1",
-             [
-               md5
-             ]
+             [md5]
            ) do
         {:ok, %{rows: [[id]]}} ->
           case PostPolicy.fetch_visible(parse_positive_int(id), actor) do
@@ -2155,43 +2301,6 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
       end
     end)
   end
-
-  defp posts_by_md5_sqlite(path, md5s, actor) do
-    md5s
-    |> Enum.flat_map(fn md5 ->
-      sql =
-        "SELECT id FROM images WHERE LOWER(hash) = LOWER('#{sqlite_escape(md5)}') ORDER BY id DESC LIMIT 1"
-
-      case System.cmd("sqlite3", ["-noheader", path, sql], stderr_to_stdout: true) do
-        {output, 0} ->
-          case Integer.parse(output |> String.trim()) do
-            {id, ""} when id > 0 ->
-              case PostPolicy.fetch_visible(id, actor) do
-                nil -> []
-                post -> [post]
-              end
-
-            _ ->
-              []
-          end
-
-        _ ->
-          []
-      end
-    end)
-  end
-
-  defp sqlite_path do
-    case Site.sqlite_db_path() do
-      path when is_binary(path) and path != "" ->
-        if File.exists?(path), do: path, else: nil
-
-      _ ->
-        nil
-    end
-  end
-
-  defp sqlite_escape(value), do: value |> to_string() |> String.replace("'", "''")
 
   defp parse_csv_ints(value) do
     value
@@ -2210,12 +2319,19 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     |> Enum.uniq()
   end
 
-  defp bounded_selectors(value) when is_binary(value) and byte_size(value) <= 16_384 do
+  defp bounded_selectors(value) when is_binary(value) and byte_size(value) <= 16384 do
     parts = String.split(value, ",", parts: @api_selector_limit + 1, trim: true)
-    if length(parts) <= @api_selector_limit, do: parts, else: []
+
+    if length(parts) <= @api_selector_limit do
+      parts
+    else
+      []
+    end
   end
 
-  defp bounded_selectors(_), do: []
+  defp bounded_selectors(_) do
+    []
+  end
 
   defp parse_page(value) do
     case Integer.parse(to_string(value || "")) do
@@ -2224,7 +2340,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     end
   end
 
-  defp paginator_items(_page, total_pages) when total_pages <= 0, do: []
+  defp paginator_items(_page, total_pages) when total_pages <= 0 do
+    []
+  end
 
   defp paginator_items(page, total_pages) do
     pages =
@@ -2283,7 +2401,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
   end
 
   defp put_auth_cookies(conn, user_name, session_token) do
-    max_age = Users.login_memory_days() * 86_400
+    max_age = Users.login_memory_days() * 86400
     cookie_opts = cookie_options(conn, max_age)
 
     conn
@@ -2311,12 +2429,12 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
       |> put_resp_cookie(
         "shm_user",
         updated_name,
-        cookie_options(conn, Users.login_memory_days() * 86_400)
+        cookie_options(conn, Users.login_memory_days() * 86400)
       )
       |> put_resp_cookie(
         "user",
         updated_name,
-        cookie_options(conn, Users.login_memory_days() * 86_400)
+        cookie_options(conn, Users.login_memory_days() * 86400)
       )
     else
       conn
@@ -2333,7 +2451,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     ]
   end
 
-  defp user_list_pages(_params, _page, total_pages) when total_pages <= 0, do: []
+  defp user_list_pages(_params, _page, total_pages) when total_pages <= 0 do
+    []
+  end
 
   defp user_list_pages(params, page, total_pages) do
     first = max(page - 4, 1)
@@ -2365,8 +2485,13 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     "/user_admin/list?" <> query
   end
 
-  defp maybe_put_joindate(map, dates) when is_list(dates), do: Map.put(map, "r_joindate", dates)
-  defp maybe_put_joindate(map, _), do: map
+  defp maybe_put_joindate(map, dates) when is_list(dates) do
+    Map.put(map, "r_joindate", dates)
+  end
+
+  defp maybe_put_joindate(map, _) do
+    map
+  end
 
   defp user_list_sort_paths(params) do
     %{
@@ -2516,10 +2641,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
            label: "Filetype",
            type: "string",
            input: :select,
-           options: [
-             %{label: "JPEG", value: "image/jpeg"},
-             %{label: "WEBP", value: "image/webp"}
-           ]
+           options: [%{label: "JPEG", value: "image/jpeg"}, %{label: "WEBP", value: "image/webp"}]
          },
          %{name: "thumb_width", label: "Max Width", type: "int", input: :number},
          %{name: "thumb_height", label: "Max Height", type: "int", input: :number},
@@ -2580,10 +2702,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
            type: "string",
            input: :select,
            leading_break?: true,
-           options: [
-             %{label: "None", value: "none"},
-             %{label: "Gravatar", value: "gravatar"}
-           ]
+           options: [%{label: "None", value: "none"}, %{label: "Gravatar", value: "gravatar"}]
          },
          %{
            name: "avatar_gravatar_type",
@@ -2815,9 +2934,7 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
          %{kind: :label, html: "<br>%f for archive, %d for temporary directory"}
        ]},
       {"Random Post",
-       [
-         %{name: "show_random_block", label: "Show Random Block: ", type: "bool", input: :bool}
-       ]},
+       [%{name: "show_random_block", label: "Show Random Block: ", type: "bool", input: :bool}]},
       {"Random Posts List",
        [
          %{
@@ -2945,7 +3062,12 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
           value: entry.value,
           input: infer_input_type(entry.name, entry.value),
           type: infer_store_type(entry.name, entry.value),
-          rows: if(String.contains?(entry.value, "\n"), do: 4, else: nil),
+          rows:
+            if(String.contains?(entry.value, "\n")) do
+              4
+            else
+              nil
+            end,
           leading_break?: false
         }
       end)
@@ -2978,7 +3100,13 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
           |> Enum.filter(fn name -> File.dir?(Path.join(counters_dir, name)) end)
           |> Enum.sort()
       end
-      |> then(fn list -> if "default" in list, do: list, else: ["default" | list] end)
+      |> then(fn list ->
+        if "default" in list do
+          list
+        else
+          ["default" | list]
+        end
+      end)
       |> Enum.uniq()
 
     names
@@ -3085,9 +3213,18 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     value = normalize_form_value(raw_value)
 
     case to_string(type) do
-      "bool" -> if(truthy_form_value?(value), do: "Y", else: "N")
-      "int" -> value |> parse_shorthand_int() |> Integer.to_string()
-      _ -> value
+      "bool" ->
+        if(truthy_form_value?(value)) do
+          "Y"
+        else
+          "N"
+        end
+
+      "int" ->
+        value |> parse_shorthand_int() |> Integer.to_string()
+
+      _ ->
+        value
     end
   end
 
@@ -3128,7 +3265,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     end
   end
 
-  defp parse_shorthand_int(value), do: value |> to_string() |> parse_shorthand_int()
+  defp parse_shorthand_int(value) do
+    value |> to_string() |> parse_shorthand_int()
+  end
 
   defp normalize_form_value(values) when is_list(values) do
     values
@@ -3136,11 +3275,21 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     |> normalize_form_value()
   end
 
-  defp normalize_form_value(nil), do: ""
-  defp normalize_form_value(value) when is_binary(value), do: value
-  defp normalize_form_value(value), do: to_string(value)
+  defp normalize_form_value(nil) do
+    ""
+  end
 
-  defp maybe_decode_user_name(nil), do: nil
+  defp normalize_form_value(value) when is_binary(value) do
+    value
+  end
+
+  defp normalize_form_value(value) do
+    to_string(value)
+  end
+
+  defp maybe_decode_user_name(nil) do
+    nil
+  end
 
   defp maybe_decode_user_name(value) do
     value
@@ -3169,7 +3318,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     end
   end
 
-  defp with_user_id(params), do: params
+  defp with_user_id(params) do
+    params
+  end
 
   defp ensure_target_user_id(params, actor) when is_map(params) do
     cond do
@@ -3181,7 +3332,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     end
   end
 
-  defp ensure_target_user_id(params, _actor), do: params
+  defp ensure_target_user_id(params, _actor) do
+    params
+  end
 
   defp self_target?(%{id: actor_id}, params) when is_integer(actor_id) and is_map(params) do
     case Map.get(params, "id") do
@@ -3191,7 +3344,9 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     end
   end
 
-  defp self_target?(_, _), do: false
+  defp self_target?(_, _) do
+    false
+  end
 
   defp redirect_after_password_change(true, kind, message) do
     encoded = URI.encode_www_form(message)
@@ -3203,30 +3358,89 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     "/user_admin/list?#{kind}=#{encoded}"
   end
 
-  defp error_message(:invalid_credentials), do: "Invalid username or password"
-  defp error_message(:missing_credentials), do: "Missing credentials"
-  defp error_message(:invalid_username), do: "Invalid username"
-  defp error_message(:username_taken), do: "That username is already taken"
-  defp error_message(:password_mismatch), do: "Passwords do not match"
+  defp error_message(:invalid_credentials) do
+    "Invalid username or password"
+  end
 
-  defp error_message(:invalid_password),
-    do: "Password must be at least 12 characters and at most 72 bytes"
+  defp error_message(:missing_credentials) do
+    "Missing credentials"
+  end
 
-  defp error_message(:throttled), do: "Too many attempts. Try again later."
-  defp error_message(:email_required), do: "Email address is required"
-  defp error_message(:invalid_email), do: "Invalid email address"
-  defp error_message(:not_logged_in), do: "You are not logged in"
-  defp error_message(:permission_denied), do: "Permission denied"
-  defp error_message(:invalid_user_id), do: "Invalid user id"
-  defp error_message(:user_not_found), do: "User not found"
-  defp error_message(:cannot_delete_anon), do: "Cannot delete anonymous user"
-  defp error_message(:pass_column_missing), do: "Password column is missing in users table"
-  defp error_message(:email_column_missing), do: "Email column is missing in users table"
-  defp error_message(:invalid_class), do: "Invalid class"
-  defp error_message(:delete_failed), do: "Failed to delete user"
-  defp error_message(:create_failed), do: "Failed to create account"
-  defp error_message(:update_failed), do: "Failed to update user"
-  defp error_message(_), do: "Action failed"
+  defp error_message(:invalid_username) do
+    "Invalid username"
+  end
+
+  defp error_message(:username_taken) do
+    "That username is already taken"
+  end
+
+  defp error_message(:password_mismatch) do
+    "Passwords do not match"
+  end
+
+  defp error_message(:invalid_password) do
+    "Password must be at least 12 characters and at most 72 bytes"
+  end
+
+  defp error_message(:throttled) do
+    "Too many attempts. Try again later."
+  end
+
+  defp error_message(:email_required) do
+    "Email address is required"
+  end
+
+  defp error_message(:invalid_email) do
+    "Invalid email address"
+  end
+
+  defp error_message(:not_logged_in) do
+    "You are not logged in"
+  end
+
+  defp error_message(:permission_denied) do
+    "Permission denied"
+  end
+
+  defp error_message(:invalid_user_id) do
+    "Invalid user id"
+  end
+
+  defp error_message(:user_not_found) do
+    "User not found"
+  end
+
+  defp error_message(:cannot_delete_anon) do
+    "Cannot delete anonymous user"
+  end
+
+  defp error_message(:pass_column_missing) do
+    "Password column is missing in users table"
+  end
+
+  defp error_message(:email_column_missing) do
+    "Email column is missing in users table"
+  end
+
+  defp error_message(:invalid_class) do
+    "Invalid class"
+  end
+
+  defp error_message(:delete_failed) do
+    "Failed to delete user"
+  end
+
+  defp error_message(:create_failed) do
+    "Failed to create account"
+  end
+
+  defp error_message(:update_failed) do
+    "Failed to update user"
+  end
+
+  defp error_message(_) do
+    "Action failed"
+  end
 
   defp human_filesize(value) when is_integer(value) and value >= 1024 * 1024 * 1024 do
     "#{Float.round(value / (1024 * 1024 * 1024), 1)}GB"
@@ -3240,6 +3454,11 @@ defmodule ShimmiePhoenixWeb.LegacyPagesController do
     "#{Float.round(value / 1024, 1)}KB"
   end
 
-  defp human_filesize(value) when is_integer(value), do: "#{value}B"
-  defp human_filesize(_), do: "0B"
+  defp human_filesize(value) when is_integer(value) do
+    "#{value}B"
+  end
+
+  defp human_filesize(_) do
+    "0B"
+  end
 end

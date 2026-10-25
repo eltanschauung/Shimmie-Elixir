@@ -1,7 +1,5 @@
 defmodule ShimmiePhoenix.Site.Comments do
-  @moduledoc """
-  Legacy-compatible comment write helpers for `/comment/add`.
-  """
+  @moduledoc "Legacy-compatible comment write helpers for `/comment/add`.\n"
 
   alias ShimmiePhoenix.Site
   alias ShimmiePhoenix.Site.Approval
@@ -11,14 +9,13 @@ defmodule ShimmiePhoenix.Site.Comments do
   alias ShimmiePhoenix.Site.Users
   alias ShimmiePhoenix.Repo
 
-  require Logger
-
-  @sqlite_separator <<31>>
   def can_delete_comment?(actor) do
     actor_id(actor) > 0 and Permissions.allowed?(:comment_delete, actor_class(actor))
   end
 
-  def can_create_comment?(nil), do: Permissions.allowed?(:comment_create, "anonymous")
+  def can_create_comment?(nil) do
+    Permissions.allowed?(:comment_create, "anonymous")
+  end
 
   def can_create_comment?(actor) do
     actor_id(actor) > 0 and Permissions.allowed?(:comment_create, actor_class(actor))
@@ -32,7 +29,9 @@ defmodule ShimmiePhoenix.Site.Comments do
     actor_id(actor) > 0 and Permissions.allowed?(:comment_ban_ip, actor_class(actor))
   end
 
-  def anonymous_user?(actor), do: anonymous_actor?(actor)
+  def anonymous_user?(actor) do
+    anonymous_actor?(actor)
+  end
 
   def bypass_comment_checks?(actor) do
     TagEdit.can_edit_tags?(actor)
@@ -43,10 +42,12 @@ defmodule ShimmiePhoenix.Site.Comments do
     :crypto.hash(:md5, remote_ip <> day) |> Base.encode16(case: :lower)
   end
 
-  def form_hash(_), do: form_hash("0.0.0.0")
+  def form_hash(_) do
+    form_hash("0.0.0.0")
+  end
 
   def add(params, actor, remote_ip) when is_map(params) do
-    backend = db_backend()
+    backend = :repo
 
     with true <- can_create_comment?(actor),
          {:ok, image_id} <- parse_image_id(Map.get(params, "image_id")),
@@ -64,12 +65,14 @@ defmodule ShimmiePhoenix.Site.Comments do
     end
   end
 
-  def add(_, _, _), do: {:error, :invalid_request}
+  def add(_, _, _) do
+    {:error, :invalid_request}
+  end
 
   def deletion_target(comment_id, actor) do
     with {:ok, parsed_id} <- parse_image_id(comment_id),
          true <- can_delete_comment?(actor),
-         {:ok, image_id} <- comment_image_id(parsed_id, db_backend()) do
+         {:ok, image_id} <- comment_image_id(parsed_id, :repo) do
       {:ok, %{id: parsed_id, image_id: image_id}}
     else
       false -> {:error, :permission_denied}
@@ -80,7 +83,7 @@ defmodule ShimmiePhoenix.Site.Comments do
 
   def delete(comment_id, actor) do
     with {:ok, target} <- deletion_target(comment_id, actor),
-         :ok <- delete_comment_row(target.id, db_backend()) do
+         :ok <- delete_comment_row(target.id, :repo) do
       {:ok, target.image_id}
     end
   end
@@ -119,29 +122,33 @@ defmodule ShimmiePhoenix.Site.Comments do
     else
       expected = form_hash(remote_ip)
       supplied = supplied_hash |> to_string() |> String.trim() |> String.downcase()
-      if supplied != "" and supplied == expected, do: :ok, else: {:error, :form_out_of_date}
+
+      if supplied != "" and supplied == expected do
+        :ok
+      else
+        {:error, :form_out_of_date}
+      end
     end
   end
 
   defp ensure_not_duplicate(image_id, comment, :repo) do
     duplicate? = repo_comment_exists?(image_id, comment)
-    if duplicate?, do: {:error, :duplicate_comment}, else: :ok
-  end
 
-  defp ensure_not_duplicate(image_id, comment, {:sqlite, path}) do
-    duplicate? = sqlite_comment_exists?(path, image_id, comment)
-    if duplicate?, do: {:error, :duplicate_comment}, else: :ok
+    if duplicate? do
+      {:error, :duplicate_comment}
+    else
+      :ok
+    end
   end
 
   defp ensure_not_duplicate(_image_id, _comment, _backend) do
     duplicate? = false
 
-    if duplicate?, do: {:error, :duplicate_comment}, else: :ok
-  end
-
-  defp ensure_not_rate_limited(_remote_ip, {:sqlite, _path}) do
-    # Legacy behavior: sqlite backends skip interval-based flood checks.
-    :ok
+    if duplicate? do
+      {:error, :duplicate_comment}
+    else
+      :ok
+    end
   end
 
   defp ensure_not_rate_limited(remote_ip, :repo) do
@@ -161,7 +168,11 @@ defmodule ShimmiePhoenix.Site.Comments do
                [remote_ip, window_minutes]
              ) do
           {:ok, %{rows: [[count]]}} ->
-            if parse_int(count) >= max_comments, do: {:error, :rate_limited}, else: :ok
+            if parse_int(count) >= max_comments do
+              {:error, :rate_limited}
+            else
+              :ok
+            end
 
           _ ->
             :ok
@@ -169,10 +180,16 @@ defmodule ShimmiePhoenix.Site.Comments do
     end
   end
 
-  defp ensure_not_rate_limited(_remote_ip, _backend), do: :ok
+  defp ensure_not_rate_limited(_remote_ip, _backend) do
+    :ok
+  end
 
   defp ensure_image_visible(image_id, actor) do
-    if Approval.can_view_image?(image_id, actor), do: :ok, else: {:error, :post_not_found}
+    if Approval.can_view_image?(image_id, actor) do
+      :ok
+    else
+      {:error, :post_not_found}
+    end
   end
 
   defp comment_image_id(comment_id, :repo) do
@@ -182,14 +199,9 @@ defmodule ShimmiePhoenix.Site.Comments do
     end
   end
 
-  defp comment_image_id(comment_id, {:sqlite, path}) do
-    case sqlite_single(path, "SELECT image_id FROM comments WHERE id = #{comment_id} LIMIT 1") do
-      nil -> {:error, :comment_not_found}
-      image_id -> {:ok, parse_int(image_id)}
-    end
+  defp comment_image_id(_comment_id, _backend) do
+    {:error, :comment_not_found}
   end
-
-  defp comment_image_id(_comment_id, _backend), do: {:error, :comment_not_found}
 
   defp delete_comment_row(comment_id, :repo) do
     case Repo.query("DELETE FROM comments WHERE id = $1", [comment_id]) do
@@ -198,14 +210,9 @@ defmodule ShimmiePhoenix.Site.Comments do
     end
   end
 
-  defp delete_comment_row(comment_id, {:sqlite, path}) do
-    case sqlite_exec(path, "DELETE FROM comments WHERE id = #{comment_id}") do
-      :ok -> :ok
-      {:error, _} -> {:error, :delete_failed}
-    end
+  defp delete_comment_row(_comment_id, _backend) do
+    {:error, :delete_failed}
   end
-
-  defp delete_comment_row(_comment_id, _backend), do: {:error, :delete_failed}
 
   defp insert_comment(image_id, owner_id, remote_ip, comment, backend) do
     comment_id = next_comment_id(backend)
@@ -213,9 +220,6 @@ defmodule ShimmiePhoenix.Site.Comments do
     case backend do
       :repo ->
         insert_comment_repo(comment_id, image_id, owner_id, remote_ip, comment)
-
-      {:sqlite, path} ->
-        insert_comment_sqlite(path, comment_id, image_id, owner_id, remote_ip, comment)
 
       _ ->
         {:error, :create_failed}
@@ -226,11 +230,9 @@ defmodule ShimmiePhoenix.Site.Comments do
     ShimmiePhoenix.IDAllocator.next!("comments")
   end
 
-  defp next_comment_id({:sqlite, path}) do
-    ShimmiePhoenix.IDAllocator.next_sqlite!(path, "comments")
+  defp next_comment_id(_backend) do
+    1
   end
-
-  defp next_comment_id(_backend), do: 1
 
   defp insert_comment_repo(comment_id, image_id, owner_id, remote_ip, comment) do
     {columns, values, args, next_index} =
@@ -267,17 +269,6 @@ defmodule ShimmiePhoenix.Site.Comments do
     end
   end
 
-  defp insert_comment_sqlite(path, comment_id, image_id, owner_id, remote_ip, comment) do
-    sql =
-      "INSERT INTO comments(id, image_id, owner_id, owner_ip, posted, comment) VALUES (" <>
-        "#{comment_id}, #{image_id}, #{owner_id}, #{sqlite_literal(remote_ip)}, CURRENT_TIMESTAMP, #{sqlite_literal(comment)})"
-
-    case sqlite_exec(path, sql) do
-      :ok -> {:ok, comment_id}
-      {:error, _} -> {:error, :create_failed}
-    end
-  end
-
   defp repo_comment_exists?(image_id, comment) do
     case Repo.query(
            "SELECT 1 FROM comments WHERE image_id = $1 AND comment = $2 LIMIT 1",
@@ -285,16 +276,6 @@ defmodule ShimmiePhoenix.Site.Comments do
          ) do
       {:ok, %{rows: [[1]]}} -> true
       {:ok, %{rows: rows}} -> rows != []
-      _ -> false
-    end
-  end
-
-  defp sqlite_comment_exists?(path, image_id, comment) do
-    sql =
-      "SELECT 1 FROM comments WHERE image_id = #{image_id} AND comment = #{sqlite_literal(comment)} LIMIT 1"
-
-    case sqlite_single(path, sql) do
-      "1" -> true
       _ -> false
     end
   end
@@ -323,10 +304,17 @@ defmodule ShimmiePhoenix.Site.Comments do
 
   defp actor_user_id(%{id: id}) do
     parsed = parse_int(id)
-    if parsed > 0, do: parsed, else: Users.anonymous_id()
+
+    if parsed > 0 do
+      parsed
+    else
+      Users.anonymous_id()
+    end
   end
 
-  defp actor_user_id(_), do: Users.anonymous_id()
+  defp actor_user_id(_) do
+    Users.anonymous_id()
+  end
 
   defp anonymous_actor?(actor) do
     anon_id = Users.anonymous_id()
@@ -358,20 +346,6 @@ defmodule ShimmiePhoenix.Site.Comments do
     end
   end
 
-  defp sqlite_db_path do
-    case Site.sqlite_db_path() do
-      nil -> nil
-      path -> if File.exists?(path), do: path, else: nil
-    end
-  end
-
-  defp db_backend do
-    case sqlite_db_path() do
-      nil -> :repo
-      path -> {:sqlite, path}
-    end
-  end
-
   defp repo_has_column?(table, column) do
     case Repo.query(
            "SELECT 1 FROM information_schema.columns " <>
@@ -384,41 +358,6 @@ defmodule ShimmiePhoenix.Site.Comments do
     end
   end
 
-  defp sqlite_single(path, query) do
-    args = ["-noheader", "-separator", @sqlite_separator, path, query]
-
-    case System.cmd("sqlite3", args, stderr_to_stdout: true) do
-      {output, 0} ->
-        output
-        |> String.split("\n", trim: true)
-        |> List.first()
-        |> case do
-          nil -> nil
-          line -> line |> String.split(@sqlite_separator) |> List.first()
-        end
-
-      {error, _} ->
-        Logger.warning("comments.sqlite query failed: #{String.trim(error)}")
-        nil
-    end
-  end
-
-  defp sqlite_exec(path, query) do
-    case System.cmd("sqlite3", [path, query], stderr_to_stdout: true) do
-      {_output, 0} ->
-        :ok
-
-      {error, _} ->
-        Logger.warning("comments.sqlite exec failed: #{String.trim(error)}")
-        {:error, :sqlite_failed}
-    end
-  end
-
-  defp sqlite_literal(value) do
-    escaped = value |> to_string() |> String.replace("'", "''")
-    "'#{escaped}'"
-  end
-
   defp normalize_class(class) do
     class
     |> to_string()
@@ -426,9 +365,19 @@ defmodule ShimmiePhoenix.Site.Comments do
     |> String.downcase()
   end
 
-  defp actor_id(%{id: id}), do: parse_int(id)
-  defp actor_id(_), do: 0
+  defp actor_id(%{id: id}) do
+    parse_int(id)
+  end
 
-  defp actor_class(%{class: class}), do: normalize_class(class)
-  defp actor_class(_), do: ""
+  defp actor_id(_) do
+    0
+  end
+
+  defp actor_class(%{class: class}) do
+    normalize_class(class)
+  end
+
+  defp actor_class(_) do
+    ""
+  end
 end

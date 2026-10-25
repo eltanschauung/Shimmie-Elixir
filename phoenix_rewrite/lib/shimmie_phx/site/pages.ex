@@ -1,7 +1,5 @@
 defmodule ShimmiePhoenix.Site.Pages do
-  @moduledoc """
-  Lightweight read helpers for legacy route pages.
-  """
+  @moduledoc "Lightweight read helpers for legacy route pages.\n"
 
   alias ShimmiePhoenix.Site
   alias ShimmiePhoenix.Site.Approval
@@ -9,9 +7,6 @@ defmodule ShimmiePhoenix.Site.Pages do
   alias ShimmiePhoenix.Site.Store
   alias ShimmiePhoenix.Site.TagRules
   alias ShimmiePhoenix.Repo
-
-  @sqlite_separator <<31>>
-  @sqlite_row_separator <<30>>
 
   def comment_list_count do
     case Store.get_config("comment_list_count", "10") |> to_string() |> Integer.parse() do
@@ -107,7 +102,12 @@ defmodule ShimmiePhoenix.Site.Pages do
       %{
         tag: tag,
         count: count_i,
-        bucket: if(count_i > 0, do: :math.log10(count_i) |> Float.floor() |> trunc(), else: 0)
+        bucket:
+          if(count_i > 0) do
+            :math.log10(count_i) |> Float.floor() |> trunc()
+          else
+            0
+          end
       }
     end)
     |> Enum.group_by(& &1.bucket)
@@ -130,40 +130,21 @@ defmodule ShimmiePhoenix.Site.Pages do
   def list_comments(page, per_page) do
     offset = max(page - 1, 0) * per_page
 
-    case sqlite_db_path() do
-      nil ->
-        rows =
-          query_rows(
-            "SELECT c.id, c.image_id, COALESCE(u.name, 'Anonymous') AS owner_name, c.posted, c.comment " <>
-              "FROM comments c LEFT JOIN users u ON u.id = c.owner_id " <>
-              "ORDER BY c.id DESC LIMIT $1 OFFSET $2",
-            [per_page, offset]
-          )
+    rows =
+      query_rows(
+        "SELECT c.id, c.image_id, COALESCE(u.name, 'Anonymous') AS owner_name, c.posted, c.comment " <>
+          "FROM comments c LEFT JOIN users u ON u.id = c.owner_id " <>
+          "ORDER BY c.id DESC LIMIT $1 OFFSET $2",
+        [per_page, offset]
+      )
 
-        count =
-          case Repo.query("SELECT COUNT(*) FROM comments") do
-            {:ok, %{rows: [[value]]}} -> value
-            _ -> 0
-          end
+    count =
+      case Repo.query("SELECT COUNT(*) FROM comments") do
+        {:ok, %{rows: [[value]]}} -> value
+        _ -> 0
+      end
 
-        {rows, count}
-
-      path ->
-        sql =
-          "SELECT c.id, c.image_id, COALESCE(u.name, 'Anonymous'), c.posted, c.comment " <>
-            "FROM comments c LEFT JOIN users u ON u.id = c.owner_id " <>
-            "ORDER BY c.id DESC LIMIT #{per_page} OFFSET #{offset}"
-
-        rows = sqlite_rows(path, sql)
-
-        count =
-          case sqlite_single(path, "SELECT COUNT(*) FROM comments") do
-            {:ok, value} -> parse_int(value)
-            _ -> 0
-          end
-
-        {rows, count}
-    end
+    {rows, count}
   end
 
   def list_tags(sub, limit \\ 500) do
@@ -173,33 +154,17 @@ defmodule ShimmiePhoenix.Site.Pages do
         _ -> {"tag ASC", "WHERE count > 0"}
       end
 
-    case sqlite_db_path() do
-      nil ->
-        query_rows(
-          "SELECT tag, count FROM tags #{where_clause} ORDER BY #{order_by} LIMIT $1",
-          [limit]
-        )
-
-      path ->
-        sql = "SELECT tag, count FROM tags #{where_clause} ORDER BY #{order_by} LIMIT #{limit}"
-        sqlite_rows(path, sql)
-    end
+    query_rows(
+      "SELECT tag, count FROM tags #{where_clause} ORDER BY #{order_by} LIMIT $1",
+      [limit]
+    )
   end
 
   def list_blotter(limit \\ 100) do
-    case sqlite_db_path() do
-      nil ->
-        query_rows(
-          "SELECT id, entry_date, entry_text, important FROM blotter ORDER BY id DESC LIMIT $1",
-          [limit]
-        )
-
-      path ->
-        sql =
-          "SELECT id, entry_date, entry_text, important FROM blotter ORDER BY id DESC LIMIT #{limit}"
-
-        sqlite_rows(path, sql)
-    end
+    query_rows(
+      "SELECT id, entry_date, entry_text, important FROM blotter ORDER BY id DESC LIMIT $1",
+      [limit]
+    )
   end
 
   def add_blotter_entry(entry_text, important \\ false)
@@ -217,93 +182,49 @@ defmodule ShimmiePhoenix.Site.Pages do
     end
   end
 
-  def add_blotter_entry(_, _), do: {:error, :invalid_entry}
+  def add_blotter_entry(_, _) do
+    {:error, :invalid_entry}
+  end
 
   def wiki_latest(title) when is_binary(title) do
-    escaped = escape_sqlite_string(title)
+    case Repo.query(
+           "SELECT title, revision, date, body " <>
+             "FROM wiki_pages WHERE LOWER(title) = LOWER($1) ORDER BY revision DESC LIMIT 1",
+           [title]
+         ) do
+      {:ok, %{rows: [[t, rev, date, body]]}} ->
+        {:ok, %{title: t, revision: rev, date: to_string(date), body: body}}
 
-    case sqlite_db_path() do
-      nil ->
-        case Repo.query(
-               "SELECT title, revision, date, body " <>
-                 "FROM wiki_pages WHERE LOWER(title) = LOWER($1) ORDER BY revision DESC LIMIT 1",
-               [title]
-             ) do
-          {:ok, %{rows: [[t, rev, date, body]]}} ->
-            {:ok, %{title: t, revision: rev, date: to_string(date), body: body}}
-
-          _ ->
-            :not_found
-        end
-
-      path ->
-        sql =
-          "SELECT title, revision, date, body FROM wiki_pages " <>
-            "WHERE LOWER(title) = LOWER('#{escaped}') ORDER BY revision DESC LIMIT 1"
-
-        case sqlite_single_row(path, sql, 4) do
-          {:ok, [t, rev, date, body]} ->
-            {:ok, %{title: t, revision: parse_int(rev), date: date, body: body}}
-
-          _ ->
-            :not_found
-        end
+      _ ->
+        :not_found
     end
   end
 
   def wiki_history(title, limit \\ 50) when is_binary(title) do
-    escaped = escape_sqlite_string(title)
-
-    case sqlite_db_path() do
-      nil ->
-        query_rows(
-          "SELECT revision, date FROM wiki_pages WHERE LOWER(title) = LOWER($1) ORDER BY revision DESC LIMIT $2",
-          [title, limit]
-        )
-
-      path ->
-        sql =
-          "SELECT revision, date FROM wiki_pages " <>
-            "WHERE LOWER(title) = LOWER('#{escaped}') ORDER BY revision DESC LIMIT #{limit}"
-
-        sqlite_rows(path, sql)
-    end
+    query_rows(
+      "SELECT revision, date FROM wiki_pages WHERE LOWER(title) = LOWER($1) ORDER BY revision DESC LIMIT $2",
+      [title, limit]
+    )
   end
 
   def wiki_revision(title, revision)
       when is_binary(title) and is_integer(revision) and revision > 0 do
-    escaped = escape_sqlite_string(title)
+    case Repo.query(
+           "SELECT title, revision, date, body FROM wiki_pages " <>
+             "WHERE LOWER(title) = LOWER($1) AND revision = $2 LIMIT 1",
+           [title, revision]
+         ) do
+      {:ok, %{rows: [[t, rev, date, body]]}} ->
+        {:ok, %{title: t, revision: parse_int(rev), date: to_string(date), body: body}}
 
-    case sqlite_db_path() do
-      nil ->
-        case Repo.query(
-               "SELECT title, revision, date, body FROM wiki_pages " <>
-                 "WHERE LOWER(title) = LOWER($1) AND revision = $2 LIMIT 1",
-               [title, revision]
-             ) do
-          {:ok, %{rows: [[t, rev, date, body]]}} ->
-            {:ok, %{title: t, revision: parse_int(rev), date: to_string(date), body: body}}
-
-          _ ->
-            {:error, :revision_not_found}
-        end
-
-      path ->
-        sql =
-          "SELECT title, revision, date, body FROM wiki_pages " <>
-            "WHERE LOWER(title) = LOWER('#{escaped}') AND revision = #{revision} LIMIT 1"
-
-        case sqlite_single_row(path, sql, 4) do
-          {:ok, [t, rev, date, body]} ->
-            {:ok, %{title: t, revision: parse_int(rev), date: date, body: body}}
-
-          _ ->
-            {:error, :revision_not_found}
-        end
+      _ ->
+        {:error, :revision_not_found}
     end
   end
 
-  def wiki_revision(_title, _revision), do: {:error, :revision_not_found}
+  def wiki_revision(_title, _revision) do
+    {:error, :revision_not_found}
+  end
 
   def wiki_save(title, body, owner_id, owner_ip)
       when is_binary(title) and is_integer(owner_id) and is_binary(owner_ip) do
@@ -318,14 +239,13 @@ defmodule ShimmiePhoenix.Site.Pages do
         {:error, :empty_body}
 
       true ->
-        case sqlite_db_path() do
-          nil -> wiki_save_repo(clean_title, clean_body, owner_id, owner_ip)
-          path -> wiki_save_sqlite(path, clean_title, clean_body, owner_id, owner_ip)
-        end
+        wiki_save_repo(clean_title, clean_body, owner_id, owner_ip)
     end
   end
 
-  def wiki_save(_title, _body, _owner_id, _owner_ip), do: {:error, :invalid_title}
+  def wiki_save(_title, _body, _owner_id, _owner_ip) do
+    {:error, :invalid_title}
+  end
 
   def wiki_delete(title) when is_binary(title) do
     clean_title = String.trim(title)
@@ -333,23 +253,16 @@ defmodule ShimmiePhoenix.Site.Pages do
     if clean_title == "" do
       {:error, :invalid_title}
     else
-      case sqlite_db_path() do
-        nil ->
-          case Repo.query("DELETE FROM wiki_pages WHERE LOWER(title) = LOWER($1)", [clean_title]) do
-            {:ok, _} -> :ok
-            _ -> {:error, :delete_failed}
-          end
-
-        path ->
-          sql =
-            "DELETE FROM wiki_pages WHERE LOWER(title) = LOWER(#{sqlite_literal(clean_title)})"
-
-          sqlite_exec(path, sql)
+      case Repo.query("DELETE FROM wiki_pages WHERE LOWER(title) = LOWER($1)", [clean_title]) do
+        {:ok, _} -> :ok
+        _ -> {:error, :delete_failed}
       end
     end
   end
 
-  def wiki_delete(_), do: {:error, :invalid_title}
+  def wiki_delete(_) do
+    {:error, :invalid_title}
+  end
 
   def wiki_revert(title, revision, owner_id, owner_ip)
       when is_binary(title) and is_integer(revision) and revision > 0 do
@@ -358,30 +271,19 @@ defmodule ShimmiePhoenix.Site.Pages do
     end
   end
 
-  def wiki_revert(_title, _revision, _owner_id, _owner_ip), do: {:error, :revision_not_found}
+  def wiki_revert(_title, _revision, _owner_id, _owner_ip) do
+    {:error, :revision_not_found}
+  end
 
   def list_aliases(limit \\ 500) when is_integer(limit) and limit > 0 do
-    case sqlite_db_path() do
-      nil ->
-        if repo_table_exists?("aliases") do
-          query_rows(
-            "SELECT oldtag, newtag FROM aliases ORDER BY LOWER(oldtag) ASC LIMIT $1",
-            [limit]
-          )
-          |> Enum.map(fn [oldtag, newtag] -> %{oldtag: oldtag, newtag: newtag} end)
-        else
-          []
-        end
-
-      path ->
-        if sqlite_table_exists?(path, "aliases") do
-          sql = "SELECT oldtag, newtag FROM aliases ORDER BY LOWER(oldtag) ASC LIMIT #{limit}"
-
-          sqlite_rows(path, sql)
-          |> Enum.map(fn [oldtag, newtag] -> %{oldtag: oldtag, newtag: newtag} end)
-        else
-          []
-        end
+    if repo_table_exists?("aliases") do
+      query_rows(
+        "SELECT oldtag, newtag FROM aliases ORDER BY LOWER(oldtag) ASC LIMIT $1",
+        [limit]
+      )
+      |> Enum.map(fn [oldtag, newtag] -> %{oldtag: oldtag, newtag: newtag} end)
+    else
+      []
     end
   end
 
@@ -397,7 +299,9 @@ defmodule ShimmiePhoenix.Site.Pages do
     end
   end
 
-  def add_alias(_, _), do: {:error, :invalid_oldtag}
+  def add_alias(_, _) do
+    {:error, :invalid_oldtag}
+  end
 
   def remove_alias(oldtag) when is_binary(oldtag) do
     oldtag = String.trim(oldtag)
@@ -405,47 +309,28 @@ defmodule ShimmiePhoenix.Site.Pages do
     if oldtag == "" do
       {:error, :invalid_oldtag}
     else
-      case sqlite_db_path() do
-        nil ->
-          case Repo.query("DELETE FROM aliases WHERE oldtag = $1", [oldtag]) do
-            {:ok, _} -> :ok
-            _ -> {:error, :delete_failed}
-          end
-
-        path ->
-          sqlite_exec(path, "DELETE FROM aliases WHERE oldtag = #{sqlite_literal(oldtag)}")
+      case Repo.query("DELETE FROM aliases WHERE oldtag = $1", [oldtag]) do
+        {:ok, _} -> :ok
+        _ -> {:error, :delete_failed}
       end
     end
   end
 
-  def remove_alias(_), do: {:error, :invalid_oldtag}
+  def remove_alias(_) do
+    {:error, :invalid_oldtag}
+  end
 
   def list_auto_tags(limit \\ 500) when is_integer(limit) and limit > 0 do
-    case sqlite_db_path() do
-      nil ->
-        if repo_table_exists?("auto_tag") do
-          query_rows(
-            "SELECT tag, additional_tags FROM auto_tag ORDER BY LOWER(tag) ASC LIMIT $1",
-            [limit]
-          )
-          |> Enum.map(fn [tag, additional_tags] ->
-            %{tag: tag, additional_tags: additional_tags}
-          end)
-        else
-          []
-        end
-
-      path ->
-        if sqlite_table_exists?(path, "auto_tag") do
-          sql = "SELECT tag, additional_tags FROM auto_tag ORDER BY LOWER(tag) ASC LIMIT #{limit}"
-
-          sqlite_rows(path, sql)
-          |> Enum.map(fn [tag, additional_tags] ->
-            %{tag: tag, additional_tags: additional_tags}
-          end)
-        else
-          []
-        end
+    if repo_table_exists?("auto_tag") do
+      query_rows(
+        "SELECT tag, additional_tags FROM auto_tag ORDER BY LOWER(tag) ASC LIMIT $1",
+        [limit]
+      )
+      |> Enum.map(fn [tag, additional_tags] ->
+        %{tag: tag, additional_tags: additional_tags}
+      end)
+    else
+      []
     end
   end
 
@@ -460,7 +345,9 @@ defmodule ShimmiePhoenix.Site.Pages do
     end
   end
 
-  def add_auto_tag(_, _), do: {:error, :invalid_tag}
+  def add_auto_tag(_, _) do
+    {:error, :invalid_tag}
+  end
 
   def remove_auto_tag(tag) when is_binary(tag) do
     tag = String.trim(tag)
@@ -468,20 +355,16 @@ defmodule ShimmiePhoenix.Site.Pages do
     if tag == "" do
       {:error, :invalid_tag}
     else
-      case sqlite_db_path() do
-        nil ->
-          case Repo.query("DELETE FROM auto_tag WHERE tag = $1", [tag]) do
-            {:ok, _} -> :ok
-            _ -> {:error, :delete_failed}
-          end
-
-        path ->
-          sqlite_exec(path, "DELETE FROM auto_tag WHERE tag = #{sqlite_literal(tag)}")
+      case Repo.query("DELETE FROM auto_tag WHERE tag = $1", [tag]) do
+        {:ok, _} -> :ok
+        _ -> {:error, :delete_failed}
       end
     end
   end
 
-  def remove_auto_tag(_), do: {:error, :invalid_tag}
+  def remove_auto_tag(_) do
+    {:error, :invalid_tag}
+  end
 
   def autocomplete(search, limit \\ 100) when is_binary(search) do
     TagRules.autocomplete(search, limit)
@@ -491,21 +374,10 @@ defmodule ShimmiePhoenix.Site.Pages do
     sql_like = escape_like(String.downcase(search)) <> "%"
 
     rows =
-      case sqlite_db_path() do
-        nil ->
-          query_rows(
-            "SELECT tag FROM tags WHERE LOWER(tag) LIKE $1 AND count > 0 ORDER BY count DESC, tag ASC LIMIT $2",
-            [sql_like, limit]
-          )
-
-        path ->
-          sql =
-            "SELECT tag FROM tags " <>
-              "WHERE LOWER(tag) LIKE '#{escape_sqlite_string(sql_like)}' ESCAPE '\\' AND count > 0 " <>
-              "ORDER BY count DESC, tag ASC LIMIT #{limit}"
-
-          sqlite_rows(path, sql)
-      end
+      query_rows(
+        "SELECT tag FROM tags WHERE LOWER(tag) LIKE $1 AND count > 0 ORDER BY count DESC, tag ASC LIMIT $2",
+        [sql_like, limit]
+      )
 
     Enum.map(rows, fn [tag] -> tag end)
   end
@@ -551,7 +423,9 @@ defmodule ShimmiePhoenix.Site.Pages do
     end
   end
 
-  def random_posts(_search, _count), do: []
+  def random_posts(_search, _count) do
+    []
+  end
 
   def site_title do
     Store.get_config("title", "Shimmie")
@@ -653,7 +527,7 @@ defmodule ShimmiePhoenix.Site.Pages do
 
   def system_info_data do
     %{
-      db_mode: if(is_nil(sqlite_db_path()), do: "repo", else: "sqlite"),
+      db_mode: "repo",
       post_count: Store.count_posts(),
       comment_count: table_count("comments"),
       user_count: table_count("users"),
@@ -684,7 +558,9 @@ defmodule ShimmiePhoenix.Site.Pages do
     end)
   end
 
-  def source_history_for_image(_image_id, _limit), do: []
+  def source_history_for_image(_image_id, _limit) do
+    []
+  end
 
   def source_history_global(page, per_page \\ 100)
 
@@ -722,7 +598,9 @@ defmodule ShimmiePhoenix.Site.Pages do
     {entries, has_next?}
   end
 
-  def source_history_global(_page, _per_page), do: {[], false}
+  def source_history_global(_page, _per_page) do
+    {[], false}
+  end
 
   def tag_history_for_image(image_id, limit \\ 100)
 
@@ -746,7 +624,9 @@ defmodule ShimmiePhoenix.Site.Pages do
     end)
   end
 
-  def tag_history_for_image(_image_id, _limit), do: []
+  def tag_history_for_image(_image_id, _limit) do
+    []
+  end
 
   def tag_history_global(page, per_page \\ 100)
 
@@ -784,7 +664,9 @@ defmodule ShimmiePhoenix.Site.Pages do
     {entries, has_next?}
   end
 
-  def tag_history_global(_page, _per_page), do: {[], false}
+  def tag_history_global(_page, _per_page) do
+    {[], false}
+  end
 
   def list_ip_bans(limit \\ 100) do
     query_rows_typed(
@@ -874,7 +756,9 @@ defmodule ShimmiePhoenix.Site.Pages do
     end
   end
 
-  defp comment_thread(_), do: nil
+  defp comment_thread(_) do
+    nil
+  end
 
   defp comments_for_image(image_id, max_comments) do
     rows =
@@ -929,11 +813,34 @@ defmodule ShimmiePhoenix.Site.Pages do
     thumb_width = config_int("thumb_width", 192)
     thumb_height = config_int("thumb_height", 192)
 
-    w = if width > 0, do: width, else: 192
-    h = if height > 0, do: height, else: 192
+    w =
+      if width > 0 do
+        width
+      else
+        192
+      end
 
-    w = if w > h * 5, do: h * 5, else: w
-    h = if h > w * 5, do: w * 5, else: h
+    h =
+      if height > 0 do
+        height
+      else
+        192
+      end
+
+    w =
+      if w > h * 5 do
+        h * 5
+      else
+        w
+      end
+
+    h =
+      if h > w * 5 do
+        w * 5
+      else
+        h
+      end
+
     scale = min(thumb_width / w, thumb_height / h)
 
     {max(1, trunc(w * scale)), max(1, trunc(h * scale))}
@@ -968,12 +875,25 @@ defmodule ShimmiePhoenix.Site.Pages do
     "#{Float.round(value / 1024, 1)}KB"
   end
 
-  defp human_filesize(value) when is_integer(value), do: "#{value}B"
-  defp human_filesize(_), do: "0B"
+  defp human_filesize(value) when is_integer(value) do
+    "#{value}B"
+  end
 
-  defp tag_prefix_pattern(nil), do: "%"
-  defp tag_prefix_pattern(""), do: "%"
-  defp tag_prefix_pattern(value), do: escape_like(String.downcase(value)) <> "%"
+  defp human_filesize(_) do
+    "0B"
+  end
+
+  defp tag_prefix_pattern(nil) do
+    "%"
+  end
+
+  defp tag_prefix_pattern("") do
+    "%"
+  end
+
+  defp tag_prefix_pattern(value) do
+    escape_like(String.downcase(value)) <> "%"
+  end
 
   defp tag_scale(count, min_count) do
     base = max(count - min_count + 1, 1)
@@ -995,24 +915,12 @@ defmodule ShimmiePhoenix.Site.Pages do
   end
 
   defp query_rows_typed(sql, params) when is_binary(sql) and is_map(params) do
-    case sqlite_db_path() do
-      nil -> query_rows_with_named_params_repo(sql, params)
-      path -> query_rows_with_named_params_sqlite(path, sql, params)
-    end
+    query_rows_with_named_params_repo(sql, params)
   end
 
   defp query_rows_with_named_params_repo(sql, params) do
     {compiled_sql, args} = named_to_positional(sql, params)
     query_rows(compiled_sql, args)
-  end
-
-  defp query_rows_with_named_params_sqlite(path, sql, params) do
-    compiled_sql =
-      Enum.reduce(params, sql, fn {key, value}, acc ->
-        String.replace(acc, ":#{key}", sqlite_literal(value))
-      end)
-
-    sqlite_rows(path, compiled_sql)
   end
 
   defp named_to_positional(sql, params) do
@@ -1030,11 +938,6 @@ defmodule ShimmiePhoenix.Site.Pages do
     {compiled_sql, args}
   end
 
-  defp sqlite_literal(value) when is_integer(value), do: Integer.to_string(value)
-  defp sqlite_literal(value) when is_float(value), do: Float.to_string(value)
-  defp sqlite_literal(value) when is_boolean(value), do: if(value, do: "1", else: "0")
-  defp sqlite_literal(value), do: "'#{escape_sqlite_string(to_string(value))}'"
-
   defp query_rows(sql, params) do
     case Repo.query(sql, params) do
       {:ok, %{rows: rows}} ->
@@ -1045,44 +948,16 @@ defmodule ShimmiePhoenix.Site.Pages do
     end
   end
 
-  defp to_string_if_needed(nil), do: ""
-  defp to_string_if_needed(value) when is_binary(value), do: value
-  defp to_string_if_needed(value), do: to_string(value)
-
-  defp sqlite_rows(path, sql) do
-    args = [
-      "-noheader",
-      "-separator",
-      @sqlite_separator,
-      "-newline",
-      @sqlite_row_separator,
-      path,
-      sql
-    ]
-
-    case System.cmd("sqlite3", args, stderr_to_stdout: true) do
-      {output, 0} ->
-        output
-        |> String.split(@sqlite_row_separator, trim: true)
-        |> Enum.map(fn line -> String.split(line, @sqlite_separator) end)
-
-      _ ->
-        []
-    end
+  defp to_string_if_needed(nil) do
+    ""
   end
 
-  defp sqlite_single(path, sql) do
-    case sqlite_rows(path, sql) do
-      [[value] | _] -> {:ok, value}
-      _ -> {:error, :not_found}
-    end
+  defp to_string_if_needed(value) when is_binary(value) do
+    value
   end
 
-  defp sqlite_single_row(path, sql, _parts) do
-    case sqlite_rows(path, sql) do
-      [line | _] -> {:ok, line}
-      _ -> {:error, :sqlite_failed}
-    end
+  defp to_string_if_needed(value) do
+    to_string(value)
   end
 
   defp wiki_save_repo(title, body, owner_id, owner_ip) do
@@ -1104,20 +979,13 @@ defmodule ShimmiePhoenix.Site.Pages do
     end
   end
 
-  defp wiki_save_sqlite(path, title, body, owner_id, owner_ip) do
-    with :ok <- ensure_sqlite_wiki_table(path),
-         next_id <- ShimmiePhoenix.IDAllocator.next_sqlite!(path, "wiki_pages"),
-         {:ok, next_revision} <-
-           sqlite_single(
-             path,
-             "SELECT COALESCE(MAX(revision), 0) + 1 FROM wiki_pages WHERE LOWER(title) = LOWER(#{sqlite_literal(title)})"
-           ),
-         :ok <-
-           sqlite_exec(
-             path,
-             "INSERT INTO wiki_pages(id, owner_id, owner_ip, date, title, revision, locked, body) VALUES (" <>
-               "#{parse_int(next_id)}, #{owner_id}, #{sqlite_literal(owner_ip)}, #{sqlite_literal(timestamp_now())}, " <>
-               "#{sqlite_literal(title)}, #{parse_int(next_revision)}, 0, #{sqlite_literal(body)})"
+  defp add_alias_db(oldtag, newtag) do
+    with :ok <- ensure_repo_aliases_table(),
+         {:ok, _} <-
+           Repo.query(
+             "INSERT INTO aliases(oldtag, newtag) VALUES ($1, $2) " <>
+               "ON CONFLICT(oldtag) DO UPDATE SET newtag = EXCLUDED.newtag",
+             [oldtag, newtag]
            ) do
       :ok
     else
@@ -1125,96 +993,31 @@ defmodule ShimmiePhoenix.Site.Pages do
     end
   end
 
-  defp add_alias_db(oldtag, newtag) do
-    case sqlite_db_path() do
-      nil ->
-        with :ok <- ensure_repo_aliases_table(),
-             {:ok, _} <-
-               Repo.query(
-                 "INSERT INTO aliases(oldtag, newtag) VALUES ($1, $2) " <>
-                   "ON CONFLICT(oldtag) DO UPDATE SET newtag = EXCLUDED.newtag",
-                 [oldtag, newtag]
-               ) do
-          :ok
-        else
-          _ -> {:error, :save_failed}
-        end
-
-      path ->
-        with :ok <- ensure_sqlite_aliases_table(path),
-             :ok <-
-               sqlite_exec(path, "DELETE FROM aliases WHERE oldtag = #{sqlite_literal(oldtag)}"),
-             :ok <-
-               sqlite_exec(
-                 path,
-                 "INSERT INTO aliases(oldtag, newtag) VALUES (#{sqlite_literal(oldtag)}, #{sqlite_literal(newtag)})"
-               ) do
-          :ok
-        else
-          _ -> {:error, :save_failed}
-        end
-    end
-  end
-
   defp add_auto_tag_db(tag, additional_tags) do
-    case sqlite_db_path() do
-      nil ->
-        with :ok <- ensure_repo_auto_tag_table(),
-             {:ok, _} <-
-               Repo.query(
-                 "INSERT INTO auto_tag(tag, additional_tags) VALUES ($1, $2) " <>
-                   "ON CONFLICT(tag) DO UPDATE SET additional_tags = EXCLUDED.additional_tags",
-                 [tag, additional_tags]
-               ) do
-          :ok
-        else
-          _ -> {:error, :save_failed}
-        end
-
-      path ->
-        with :ok <- ensure_sqlite_auto_tag_table(path),
-             :ok <- sqlite_exec(path, "DELETE FROM auto_tag WHERE tag = #{sqlite_literal(tag)}"),
-             :ok <-
-               sqlite_exec(
-                 path,
-                 "INSERT INTO auto_tag(tag, additional_tags) VALUES (#{sqlite_literal(tag)}, #{sqlite_literal(additional_tags)})"
-               ) do
-          :ok
-        else
-          _ -> {:error, :save_failed}
-        end
+    with :ok <- ensure_repo_auto_tag_table(),
+         {:ok, _} <-
+           Repo.query(
+             "INSERT INTO auto_tag(tag, additional_tags) VALUES ($1, $2) " <>
+               "ON CONFLICT(tag) DO UPDATE SET additional_tags = EXCLUDED.additional_tags",
+             [tag, additional_tags]
+           ) do
+      :ok
+    else
+      _ -> {:error, :save_failed}
     end
   end
 
   defp add_blotter_entry_db(entry_text, important) do
-    case sqlite_db_path() do
-      nil ->
-        with :ok <- ensure_repo_blotter_table(),
-             next_id <- ShimmiePhoenix.IDAllocator.next!("blotter"),
-             {:ok, _} <-
-               Repo.query(
-                 "INSERT INTO blotter(id, entry_date, entry_text, important) VALUES ($1, NOW(), $2, $3)",
-                 [parse_int(next_id), entry_text, important]
-               ) do
-          :ok
-        else
-          _ -> {:error, :save_failed}
-        end
-
-      path ->
-        with :ok <- ensure_sqlite_blotter_table(path),
-             next_id <- ShimmiePhoenix.IDAllocator.next_sqlite!(path, "blotter"),
-             :ok <-
-               sqlite_exec(
-                 path,
-                 "INSERT INTO blotter(id, entry_date, entry_text, important) VALUES (" <>
-                   "#{parse_int(next_id)}, #{sqlite_literal(timestamp_now())}, " <>
-                   "#{sqlite_literal(entry_text)}, #{if(important, do: 1, else: 0)})"
-               ) do
-          :ok
-        else
-          _ -> {:error, :save_failed}
-        end
+    with :ok <- ensure_repo_blotter_table(),
+         next_id <- ShimmiePhoenix.IDAllocator.next!("blotter"),
+         {:ok, _} <-
+           Repo.query(
+             "INSERT INTO blotter(id, entry_date, entry_text, important) VALUES ($1, NOW(), $2, $3)",
+             [parse_int(next_id), entry_text, important]
+           ) do
+      :ok
+    else
+      _ -> {:error, :save_failed}
     end
   end
 
@@ -1249,40 +1052,6 @@ defmodule ShimmiePhoenix.Site.Pages do
     end
   end
 
-  defp ensure_sqlite_aliases_table(path) do
-    sqlite_exec(
-      path,
-      "CREATE TABLE IF NOT EXISTS aliases (oldtag TEXT PRIMARY KEY, newtag TEXT NOT NULL)"
-    )
-  end
-
-  defp ensure_sqlite_auto_tag_table(path) do
-    sqlite_exec(
-      path,
-      "CREATE TABLE IF NOT EXISTS auto_tag (tag TEXT PRIMARY KEY, additional_tags TEXT NOT NULL)"
-    )
-  end
-
-  defp ensure_sqlite_blotter_table(path) do
-    sqlite_exec(
-      path,
-      "CREATE TABLE IF NOT EXISTS blotter (" <>
-        "id INTEGER PRIMARY KEY, " <>
-        "entry_date TEXT NOT NULL, " <>
-        "entry_text TEXT NOT NULL, " <>
-        "important INTEGER NOT NULL DEFAULT 0)"
-    )
-  end
-
-  defp ensure_sqlite_wiki_table(path) do
-    sqlite_exec(
-      path,
-      "CREATE TABLE IF NOT EXISTS wiki_pages (" <>
-        "id INTEGER PRIMARY KEY, owner_id INTEGER NOT NULL DEFAULT 1, owner_ip TEXT NOT NULL DEFAULT '', " <>
-        "date TEXT NOT NULL, title TEXT NOT NULL, revision INTEGER NOT NULL, locked INTEGER NOT NULL DEFAULT 0, body TEXT NOT NULL)"
-    )
-  end
-
   defp repo_table_exists?(table_name) do
     case Repo.query(
            "SELECT 1 FROM information_schema.tables WHERE table_schema = CURRENT_SCHEMA() AND table_name = $1 LIMIT 1",
@@ -1291,36 +1060,6 @@ defmodule ShimmiePhoenix.Site.Pages do
       {:ok, %{rows: [[1]]}} -> true
       {:ok, %{rows: rows}} -> rows != []
       _ -> false
-    end
-  end
-
-  defp sqlite_table_exists?(path, table_name) do
-    case sqlite_single(
-           path,
-           "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = #{sqlite_literal(table_name)} LIMIT 1"
-         ) do
-      {:ok, "1"} -> true
-      _ -> false
-    end
-  end
-
-  defp sqlite_exec(path, sql) do
-    case System.cmd("sqlite3", [path, sql], stderr_to_stdout: true) do
-      {_output, 0} -> :ok
-      _ -> {:error, :sqlite_failed}
-    end
-  end
-
-  defp timestamp_now do
-    NaiveDateTime.utc_now()
-    |> NaiveDateTime.truncate(:second)
-    |> NaiveDateTime.to_string()
-  end
-
-  defp sqlite_db_path do
-    case Site.sqlite_db_path() do
-      nil -> nil
-      path -> if File.exists?(path), do: path, else: nil
     end
   end
 
@@ -1354,7 +1093,12 @@ defmodule ShimmiePhoenix.Site.Pages do
         case Float.parse(number) do
           {n, ""} ->
             parsed = trunc(n * multiplier)
-            if(parsed > 0, do: parsed, else: default)
+
+            if(parsed > 0) do
+              parsed
+            else
+              default
+            end
 
           _ ->
             default
@@ -1365,8 +1109,6 @@ defmodule ShimmiePhoenix.Site.Pages do
     end
   end
 
-  defp escape_sqlite_string(value), do: String.replace(value, "'", "''")
-
   defp escape_like(value) do
     value
     |> String.replace("\\", "\\\\")
@@ -1374,8 +1116,13 @@ defmodule ShimmiePhoenix.Site.Pages do
     |> String.replace("_", "\\_")
   end
 
-  defp maybe_filter_enabled(rows, true), do: rows
-  defp maybe_filter_enabled(rows, false), do: Enum.filter(rows, & &1.enabled?)
+  defp maybe_filter_enabled(rows, true) do
+    rows
+  end
+
+  defp maybe_filter_enabled(rows, false) do
+    Enum.filter(rows, & &1.enabled?)
+  end
 
   defp table_count(table) do
     case query_rows_typed("SELECT COUNT(*) FROM #{table}", %{}) do

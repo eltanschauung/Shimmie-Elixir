@@ -1,25 +1,20 @@
 defmodule ShimmiePhoenix.Site.Posts do
-  @moduledoc """
-  Read-only access helpers for legacy post data and media paths.
-  """
+  @moduledoc "Read-only access helpers for legacy post data and media paths.\n"
 
   alias ShimmiePhoenix.Site
   alias ShimmiePhoenix.Site.Store
   alias ShimmiePhoenix.Repo
 
   @max_legacy_id 4_294_967_296
-  @sqlite_separator <<31>>
-  @sqlite_row_separator <<30>>
   @image_exts ~w(jpg jpeg png gif webp avif)
 
   def get_post(id) when is_integer(id) and id > 0 and id < @max_legacy_id do
-    case sqlite_db_path() do
-      nil -> get_post_repo(id)
-      path -> get_post_sqlite(path, id)
-    end
+    get_post_repo(id)
   end
 
-  def get_post(_), do: nil
+  def get_post(_) do
+    nil
+  end
 
   def get_post_by_hash(hash) when is_binary(hash) do
     normalized =
@@ -28,18 +23,19 @@ defmodule ShimmiePhoenix.Site.Posts do
       |> String.downcase()
 
     if valid_hash?(normalized) do
-      case sqlite_db_path() do
-        nil -> get_post_repo_by_hash(normalized)
-        path -> get_post_sqlite_by_hash(path, normalized)
-      end
+      get_post_repo_by_hash(normalized)
     else
       nil
     end
   end
 
-  def get_post_by_hash(_), do: nil
+  def get_post_by_hash(_) do
+    nil
+  end
 
-  def image_route(post), do: "/image/#{post.id}/#{URI.encode(download_filename(post))}"
+  def image_route(post) do
+    "/image/#{post.id}/#{URI.encode(download_filename(post))}"
+  end
 
   def download_filename(post) when is_map(post) do
     id =
@@ -82,7 +78,9 @@ defmodule ShimmiePhoenix.Site.Posts do
     "#{stem}.#{ext}"
   end
 
-  def download_filename(_), do: "post.bin"
+  def download_filename(_) do
+    "post.bin"
+  end
 
   def thumb_route(%{id: id, hash: hash}) when is_integer(id) and is_binary(hash) do
     if valid_hash?(hash) do
@@ -93,16 +91,29 @@ defmodule ShimmiePhoenix.Site.Posts do
     end
   end
 
-  def thumb_route(post), do: "/thumb/#{post.id}/thumb"
-
-  def media_path(post), do: warehouse_path("images", post.hash)
-  def thumb_path(post), do: warehouse_path("thumbs", post.hash)
-
-  def thumb_path_from_hash(hash) when is_binary(hash) and byte_size(hash) == 32 do
-    if valid_hash?(hash), do: warehouse_path("thumbs", String.downcase(hash)), else: nil
+  def thumb_route(post) do
+    "/thumb/#{post.id}/thumb"
   end
 
-  def thumb_path_from_hash(_), do: nil
+  def media_path(post) do
+    warehouse_path("images", post.hash)
+  end
+
+  def thumb_path(post) do
+    warehouse_path("thumbs", post.hash)
+  end
+
+  def thumb_path_from_hash(hash) when is_binary(hash) and byte_size(hash) == 32 do
+    if valid_hash?(hash) do
+      warehouse_path("thumbs", String.downcase(hash))
+    else
+      nil
+    end
+  end
+
+  def thumb_path_from_hash(_) do
+    nil
+  end
 
   defp thumb_version_query(hash) do
     case thumb_path_from_hash(hash) do
@@ -140,7 +151,9 @@ defmodule ShimmiePhoenix.Site.Posts do
     end
   end
 
-  def image_ext?(post), do: String.downcase(post.ext) in @image_exts
+  def image_ext?(post) do
+    String.downcase(post.ext) in @image_exts
+  end
 
   def post_extra(image_id) when is_integer(image_id) and image_id > 0 do
     defaults = %{
@@ -152,67 +165,43 @@ defmodule ShimmiePhoenix.Site.Posts do
       video_codec: nil
     }
 
-    case sqlite_db_path() do
-      nil -> post_extra_repo(image_id, defaults)
-      path -> post_extra_sqlite(path, image_id, defaults)
-    end
+    post_extra_repo(image_id, defaults)
   end
 
-  def post_extra(_),
-    do: %{locked: false, rating: "?", parent_id: nil, mime: nil, length: nil, video_codec: nil}
+  def post_extra(_) do
+    %{locked: false, rating: "?", parent_id: nil, mime: nil, length: nil, video_codec: nil}
+  end
 
   def owner_name(image_id) when is_integer(image_id) and image_id > 0 do
-    case sqlite_db_path() do
-      nil ->
-        case Repo.query(
-               "SELECT COALESCE(u.name, 'Anonymous') FROM images i " <>
-                 "LEFT JOIN users u ON u.id = i.owner_id WHERE i.id = $1 LIMIT 1",
-               [image_id]
-             ) do
-          {:ok, %{rows: [[name]]}} -> name
-          _ -> "Anonymous"
-        end
-
-      path ->
-        case sqlite_rows(
-               path,
-               "SELECT COALESCE(u.name, 'Anonymous') FROM images i " <>
-                 "LEFT JOIN users u ON u.id = i.owner_id WHERE i.id = #{image_id} LIMIT 1"
-             ) do
-          [[name] | _] -> name
-          _ -> "Anonymous"
-        end
+    case Repo.query(
+           "SELECT COALESCE(u.name, 'Anonymous') FROM images i " <>
+             "LEFT JOIN users u ON u.id = i.owner_id WHERE i.id = $1 LIMIT 1",
+           [image_id]
+         ) do
+      {:ok, %{rows: [[name]]}} -> name
+      _ -> "Anonymous"
     end
   end
 
-  def owner_name(_), do: "Anonymous"
+  def owner_name(_) do
+    "Anonymous"
+  end
 
   def tag_rows(image_id) when is_integer(image_id) and image_id > 0 do
     rows =
-      case sqlite_db_path() do
-        nil ->
-          case Repo.query(
-                 "SELECT t.tag, t.count FROM image_tags it " <>
-                   "JOIN tags t ON it.tag_id = t.id " <>
-                   "WHERE it.image_id = $1 ORDER BY t.tag",
-                 [image_id]
-               ) do
-            {:ok, %{rows: db_rows}} ->
-              Enum.map(db_rows, fn [tag, count] ->
-                [to_string(tag || ""), to_string(count || "0")]
-              end)
+      case Repo.query(
+             "SELECT t.tag, t.count FROM image_tags it " <>
+               "JOIN tags t ON it.tag_id = t.id " <>
+               "WHERE it.image_id = $1 ORDER BY t.tag",
+             [image_id]
+           ) do
+        {:ok, %{rows: db_rows}} ->
+          Enum.map(db_rows, fn [tag, count] ->
+            [to_string(tag || ""), to_string(count || "0")]
+          end)
 
-            _ ->
-              []
-          end
-
-        path ->
-          sqlite_rows(
-            path,
-            "SELECT t.tag, t.count FROM image_tags it " <>
-              "JOIN tags t ON it.tag_id = t.id " <>
-              "WHERE it.image_id = #{image_id} ORDER BY t.tag"
-          )
+        _ ->
+          []
       end
 
     Enum.map(rows, fn [tag, count] ->
@@ -224,41 +213,31 @@ defmodule ShimmiePhoenix.Site.Posts do
     end)
   end
 
-  def tag_rows(_), do: []
+  def tag_rows(_) do
+    []
+  end
 
   def comments(image_id) when is_integer(image_id) and image_id > 0 do
     rows =
-      case sqlite_db_path() do
-        nil ->
-          case Repo.query(
-                 "SELECT c.id, COALESCE(u.name, 'Anonymous'), c.posted, c.comment, COALESCE(c.owner_ip, '') " <>
-                   "FROM comments c LEFT JOIN users u ON u.id = c.owner_id " <>
-                   "WHERE c.image_id = $1 ORDER BY c.id ASC",
-                 [image_id]
-               ) do
-            {:ok, %{rows: db_rows}} ->
-              Enum.map(db_rows, fn [id, owner_name, posted, comment, owner_ip] ->
-                [
-                  to_string(id || "0"),
-                  to_string(owner_name || "Anonymous"),
-                  to_string(posted || ""),
-                  to_string(comment || ""),
-                  to_string(owner_ip || "")
-                ]
-              end)
+      case Repo.query(
+             "SELECT c.id, COALESCE(u.name, 'Anonymous'), c.posted, c.comment, COALESCE(c.owner_ip, '') " <>
+               "FROM comments c LEFT JOIN users u ON u.id = c.owner_id " <>
+               "WHERE c.image_id = $1 ORDER BY c.id ASC",
+             [image_id]
+           ) do
+        {:ok, %{rows: db_rows}} ->
+          Enum.map(db_rows, fn [id, owner_name, posted, comment, owner_ip] ->
+            [
+              to_string(id || "0"),
+              to_string(owner_name || "Anonymous"),
+              to_string(posted || ""),
+              to_string(comment || ""),
+              to_string(owner_ip || "")
+            ]
+          end)
 
-            _ ->
-              []
-          end
-
-        path ->
-          sqlite_rows(
-            path,
-            "SELECT c.id, COALESCE(u.name, 'Anonymous'), c.posted, c.comment, COALESCE(c.owner_ip, '') " <>
-              "FROM comments c LEFT JOIN users u ON u.id = c.owner_id " <>
-              "WHERE c.image_id = #{image_id} ORDER BY c.id ASC",
-            parts: 5
-          )
+        _ ->
+          []
       end
 
     Enum.flat_map(rows, fn row ->
@@ -280,12 +259,25 @@ defmodule ShimmiePhoenix.Site.Posts do
     end)
   end
 
-  def comments(_), do: []
+  def comments(_) do
+    []
+  end
 
-  def rating_label("s"), do: "Safe"
-  def rating_label("q"), do: "Questionable"
-  def rating_label("e"), do: "Explicit"
-  def rating_label(_), do: "Unrated"
+  def rating_label("s") do
+    "Safe"
+  end
+
+  def rating_label("q") do
+    "Questionable"
+  end
+
+  def rating_label("e") do
+    "Explicit"
+  end
+
+  def rating_label(_) do
+    "Unrated"
+  end
 
   defp get_post_repo(id) do
     case Repo.query(
@@ -316,23 +308,6 @@ defmodule ShimmiePhoenix.Site.Posts do
     end
   end
 
-  defp get_post_sqlite(path, id) do
-    query = """
-    SELECT id, hash, ext, filename, width, height, filesize, COALESCE(source, ''), posted, COALESCE(owner_ip, '')
-    FROM images
-    WHERE id = #{id}
-    LIMIT 1
-    """
-
-    with [row | _] <- sqlite_rows(path, query, parts: 10),
-         post <- sqlite_row_to_post(row),
-         true <- is_map(post) do
-      with_tags_sqlite(path, post)
-    else
-      _ -> nil
-    end
-  end
-
   defp get_post_repo_by_hash(hash) do
     case Repo.query(
            "SELECT id, hash, ext, filename, width, height, filesize, source, posted, COALESCE(owner_ip, '') " <>
@@ -347,40 +322,6 @@ defmodule ShimmiePhoenix.Site.Posts do
       _ ->
         nil
     end
-  end
-
-  defp get_post_sqlite_by_hash(path, hash) do
-    query = """
-    SELECT id, hash, ext, filename, width, height, filesize, COALESCE(source, ''), posted, COALESCE(owner_ip, '')
-    FROM images
-    WHERE lower(hash) = '#{hash}'
-    LIMIT 1
-    """
-
-    with [row | _] <- sqlite_rows(path, query, parts: 10),
-         post <- sqlite_row_to_post(row),
-         true <- is_map(post) do
-      with_tags_sqlite(path, post)
-    else
-      _ -> nil
-    end
-  end
-
-  defp with_tags_sqlite(path, post) do
-    query = """
-    SELECT t.tag
-    FROM image_tags it
-    JOIN tags t ON it.tag_id = t.id
-    WHERE it.image_id = #{post.id}
-    ORDER BY t.tag
-    """
-
-    tags =
-      case sqlite_rows(path, query) do
-        rows -> Enum.map(rows, fn [tag] -> tag end)
-      end
-
-    Map.put(post, :tags, tags)
   end
 
   defp post_extra_repo(image_id, defaults) do
@@ -404,55 +345,6 @@ defmodule ShimmiePhoenix.Site.Posts do
     end
   end
 
-  defp post_extra_sqlite(path, image_id, defaults) do
-    query =
-      "SELECT COALESCE(locked, 0), COALESCE(rating, '?'), COALESCE(parent_id, 0), COALESCE(mime, ''), " <>
-        "COALESCE(length, 0), COALESCE(video_codec, '') FROM images WHERE id = #{image_id} LIMIT 1"
-
-    case sqlite_rows(path, query, parts: 6) do
-      [[locked, rating, parent_id, mime, length, video_codec] | _] ->
-        %{
-          locked: truthy?(locked),
-          rating: blank_to_nil(rating) || "?",
-          parent_id: normalize_parent(parent_id),
-          mime: blank_to_nil(mime),
-          length: normalize_length(length),
-          video_codec: blank_to_nil(video_codec)
-        }
-
-      _ ->
-        defaults
-    end
-  end
-
-  defp sqlite_row_to_post([
-         id,
-         hash,
-         ext,
-         filename,
-         width,
-         height,
-         filesize,
-         source,
-         posted,
-         owner_ip
-       ]) do
-    %{
-      id: parse_int(id),
-      hash: hash,
-      ext: ext,
-      filename: filename,
-      width: parse_int(width),
-      height: parse_int(height),
-      filesize: parse_int(filesize),
-      source: blank_to_nil(source),
-      posted: posted,
-      owner_ip: blank_to_nil(owner_ip)
-    }
-  end
-
-  defp sqlite_row_to_post(_), do: nil
-
   defp row_to_post([id, hash, ext, filename, width, height, filesize, source, posted, owner_ip]) do
     %{
       id: id,
@@ -468,11 +360,21 @@ defmodule ShimmiePhoenix.Site.Posts do
     }
   end
 
-  defp blank_to_nil(nil), do: nil
-  defp blank_to_nil(""), do: nil
-  defp blank_to_nil(value), do: value
+  defp blank_to_nil(nil) do
+    nil
+  end
 
-  defp normalize_parent(nil), do: nil
+  defp blank_to_nil("") do
+    nil
+  end
+
+  defp blank_to_nil(value) do
+    value
+  end
+
+  defp normalize_parent(nil) do
+    nil
+  end
 
   defp normalize_parent(value) do
     case parse_int(value) do
@@ -481,7 +383,9 @@ defmodule ShimmiePhoenix.Site.Posts do
     end
   end
 
-  defp normalize_length(nil), do: nil
+  defp normalize_length(nil) do
+    nil
+  end
 
   defp normalize_length(value) do
     case parse_int(value) do
@@ -490,8 +394,13 @@ defmodule ShimmiePhoenix.Site.Posts do
     end
   end
 
-  defp truthy?(value) when value in [true, 1, "1", "t", "T", "true", "TRUE"], do: true
-  defp truthy?(_), do: false
+  defp truthy?(value) when value in [true, 1, "1", "t", "T", "true", "TRUE"] do
+    true
+  end
+
+  defp truthy?(_) do
+    false
+  end
 
   defp parse_int(value) do
     case Integer.parse(to_string(value || "")) do
@@ -500,7 +409,9 @@ defmodule ShimmiePhoenix.Site.Posts do
     end
   end
 
-  defp valid_hash?(hash), do: String.match?(hash, ~r/\A[0-9a-fA-F]{32}\z/)
+  defp valid_hash?(hash) do
+    String.match?(hash, ~r/\A[0-9a-fA-F]{32}\z/)
+  end
 
   defp sanitize_filename_fragment(value) do
     value
@@ -521,42 +432,5 @@ defmodule ShimmiePhoenix.Site.Posts do
       end
 
     Path.join([Site.legacy_root(), "data", base] ++ subdirs ++ [hash])
-  end
-
-  defp sqlite_db_path do
-    case Site.sqlite_db_path() do
-      nil -> nil
-      path -> if File.exists?(path), do: path, else: nil
-    end
-  end
-
-  defp sqlite_rows(path, query, opts \\ []) do
-    args = [
-      "-noheader",
-      "-separator",
-      @sqlite_separator,
-      "-newline",
-      @sqlite_row_separator,
-      path,
-      query
-    ]
-
-    parts = opts[:parts]
-
-    case System.cmd("sqlite3", args, stderr_to_stdout: true) do
-      {output, 0} ->
-        output
-        |> String.split(@sqlite_row_separator, trim: true)
-        |> Enum.map(fn line ->
-          if is_integer(parts) and parts > 0 do
-            String.split(line, @sqlite_separator, parts: parts)
-          else
-            String.split(line, @sqlite_separator)
-          end
-        end)
-
-      _ ->
-        []
-    end
   end
 end

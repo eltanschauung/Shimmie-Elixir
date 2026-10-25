@@ -1,7 +1,5 @@
 defmodule ShimmiePhoenix.Site.IPBans do
-  @moduledoc """
-  Native IP ban management and enforcement.
-  """
+  @moduledoc "Native IP ban management and enforcement.\n"
 
   import Bitwise
 
@@ -12,20 +10,18 @@ defmodule ShimmiePhoenix.Site.IPBans do
   alias ShimmiePhoenix.Site.Store
   alias ShimmiePhoenix.Site.Users
 
-  require Logger
-
   @cache_table :shimmie_ip_ban_cache
   @cache_key_active :active_bans
-  @cache_ttl_ms 60_000
-  @sqlite_separator <<31>>
-  @sqlite_row_separator <<30>>
+  @cache_ttl_ms 60000
   @valid_modes MapSet.new(["block", "firewall", "ghost", "anon-ghost"])
 
   def can_manage?(%{id: id, class: class}) when is_integer(id) and id > 0 do
     normalize_mode(class) == "admin"
   end
 
-  def can_manage?(_), do: false
+  def can_manage?(_) do
+    false
+  end
 
   def list(limit \\ 100, opts \\ []) when is_integer(limit) do
     list_page(1, limit, opts).rows
@@ -61,7 +57,9 @@ defmodule ShimmiePhoenix.Site.IPBans do
     }
   end
 
-  def list_page(_page, page_size, opts), do: list_page(1, page_size, opts)
+  def list_page(_page, page_size, opts) do
+    list_page(1, page_size, opts)
+  end
 
   def create(attrs, actor) when is_map(attrs) do
     with true <- can_manage?(actor),
@@ -95,7 +93,9 @@ defmodule ShimmiePhoenix.Site.IPBans do
     end
   end
 
-  def create(_, _), do: {:error, :invalid_request}
+  def create(_, _) do
+    {:error, :invalid_request}
+  end
 
   def delete(id, actor) do
     with true <- can_manage?(actor),
@@ -145,7 +145,9 @@ defmodule ShimmiePhoenix.Site.IPBans do
     end
   end
 
-  def delete_many(_, _), do: {:error, :invalid_request}
+  def delete_many(_, _) do
+    {:error, :invalid_request}
+  end
 
   def evaluate_request(remote_ip, actor) do
     with {:ok, remote} <- parse_ip(remote_ip),
@@ -268,51 +270,25 @@ defmodule ShimmiePhoenix.Site.IPBans do
          expires: expires,
          banner_id: banner_id
        }) do
-    case sqlite_db_path() do
-      nil ->
-        sql =
-          "INSERT INTO bans(id, ip, mode, reason, added, expires, banner_id) " <>
-            "VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5, $6)"
+    sql =
+      "INSERT INTO bans(id, ip, mode, reason, added, expires, banner_id) " <>
+        "VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, $5, $6)"
 
-        case Repo.query(sql, [id, ip, mode, reason, expires, banner_id]) do
-          {:ok, _} -> :ok
-          _ -> {:error, :create_failed}
-        end
-
-      path ->
-        expires_sql =
-          if is_nil(expires), do: "NULL", else: sqlite_literal(NaiveDateTime.to_string(expires))
-
-        sql =
-          "INSERT INTO bans(id, ip, mode, reason, added, expires, banner_id) VALUES (" <>
-            "#{id}, #{sqlite_literal(ip)}, #{sqlite_literal(mode)}, #{sqlite_literal(reason)}, " <>
-            "CURRENT_TIMESTAMP, #{expires_sql}, #{banner_id})"
-
-        sqlite_exec(path, sql)
+    case Repo.query(sql, [id, ip, mode, reason, expires, banner_id]) do
+      {:ok, _} -> :ok
+      _ -> {:error, :create_failed}
     end
   end
 
   defp delete_row(id) do
-    case sqlite_db_path() do
-      nil ->
-        case Repo.query("DELETE FROM bans WHERE id = $1", [id]) do
-          {:ok, _} -> :ok
-          _ -> {:error, :delete_failed}
-        end
-
-      path ->
-        sqlite_exec(path, "DELETE FROM bans WHERE id = #{id}")
+    case Repo.query("DELETE FROM bans WHERE id = $1", [id]) do
+      {:ok, _} -> :ok
+      _ -> {:error, :delete_failed}
     end
   end
 
   defp next_id do
-    case sqlite_db_path() do
-      nil ->
-        ShimmiePhoenix.IDAllocator.next!("bans")
-
-      path ->
-        ShimmiePhoenix.IDAllocator.next_sqlite!(path, "bans")
-    end
+    ShimmiePhoenix.IDAllocator.next!("bans")
   end
 
   defp parse_target_ip(value) do
@@ -347,10 +323,17 @@ defmodule ShimmiePhoenix.Site.IPBans do
 
   defp parse_mode(value) do
     mode = value |> to_string() |> String.trim() |> normalize_mode()
-    if MapSet.member?(@valid_modes, mode), do: {:ok, mode}, else: {:ok, "block"}
+
+    if MapSet.member?(@valid_modes, mode) do
+      {:ok, mode}
+    else
+      {:ok, "block"}
+    end
   end
 
-  defp parse_expires(nil), do: {:ok, nil}
+  defp parse_expires(nil) do
+    {:ok, nil}
+  end
 
   defp parse_expires(value) do
     raw = value |> to_string() |> String.trim()
@@ -390,14 +373,33 @@ defmodule ShimmiePhoenix.Site.IPBans do
     end
   end
 
-  defp interval_seconds(n, unit) when unit in ["minute", "minutes"], do: n * 60
-  defp interval_seconds(n, unit) when unit in ["hour", "hours"], do: n * 3600
-  defp interval_seconds(n, unit) when unit in ["day", "days"], do: n * 86_400
-  defp interval_seconds(n, unit) when unit in ["week", "weeks"], do: n * 604_800
-  defp interval_seconds(n, _), do: n * 604_800
+  defp interval_seconds(n, unit) when unit in ["minute", "minutes"] do
+    n * 60
+  end
 
-  defp parse_actor_id(%{id: id}) when is_integer(id) and id > 0, do: {:ok, id}
-  defp parse_actor_id(_), do: {:error, :permission_denied}
+  defp interval_seconds(n, unit) when unit in ["hour", "hours"] do
+    n * 3600
+  end
+
+  defp interval_seconds(n, unit) when unit in ["day", "days"] do
+    n * 86400
+  end
+
+  defp interval_seconds(n, unit) when unit in ["week", "weeks"] do
+    n * 604_800
+  end
+
+  defp interval_seconds(n, _) do
+    n * 604_800
+  end
+
+  defp parse_actor_id(%{id: id}) when is_integer(id) and id > 0 do
+    {:ok, id}
+  end
+
+  defp parse_actor_id(_) do
+    {:error, :permission_denied}
+  end
 
   defp parse_positive_id(value) do
     case Integer.parse(to_string(value || "")) do
@@ -418,7 +420,9 @@ defmodule ShimmiePhoenix.Site.IPBans do
     }
   end
 
-  defp row_to_ban(_), do: %{id: 0, ip: "", mode: "block", reason: "", added: "", expires: ""}
+  defp row_to_ban(_) do
+    %{id: 0, ip: "", mode: "block", reason: "", added: "", expires: ""}
+  end
 
   defp normalize_mode(value) do
     value
@@ -427,21 +431,41 @@ defmodule ShimmiePhoenix.Site.IPBans do
     |> String.downcase()
   end
 
-  defp anonymous_actor?(nil), do: true
+  defp anonymous_actor?(nil) do
+    true
+  end
 
   defp anonymous_actor?(%{id: id, class: class}) do
     id == Users.anonymous_id() or normalize_mode(class) == "anonymous"
   end
 
-  defp anonymous_actor?(_), do: true
+  defp anonymous_actor?(_) do
+    true
+  end
 
-  defp ghost_actor(nil), do: %{id: Users.anonymous_id(), name: "Anonymous", class: "ghost"}
-  defp ghost_actor(actor) when is_map(actor), do: Map.put(actor, :class, "ghost")
-  defp ghost_actor(_), do: %{id: Users.anonymous_id(), name: "Anonymous", class: "ghost"}
+  defp ghost_actor(nil) do
+    %{id: Users.anonymous_id(), name: "Anonymous", class: "ghost"}
+  end
 
-  defp valid_prefix?({_a, _b, _c, _d}, prefix), do: prefix >= 0 and prefix <= 32
-  defp valid_prefix?({_a, _b, _c, _d, _e, _f, _g, _h}, prefix), do: prefix >= 0 and prefix <= 128
-  defp valid_prefix?(_, _), do: false
+  defp ghost_actor(actor) when is_map(actor) do
+    Map.put(actor, :class, "ghost")
+  end
+
+  defp ghost_actor(_) do
+    %{id: Users.anonymous_id(), name: "Anonymous", class: "ghost"}
+  end
+
+  defp valid_prefix?({_a, _b, _c, _d}, prefix) do
+    prefix >= 0 and prefix <= 32
+  end
+
+  defp valid_prefix?({_a, _b, _c, _d, _e, _f, _g, _h}, prefix) do
+    prefix >= 0 and prefix <= 128
+  end
+
+  defp valid_prefix?(_, _) do
+    false
+  end
 
   defp ip_match?(remote, target) do
     target = to_string(target || "") |> String.trim()
@@ -480,7 +504,9 @@ defmodule ShimmiePhoenix.Site.IPBans do
     end
   end
 
-  defp compare_prefix(_left, _right, 0), do: true
+  defp compare_prefix(_left, _right, 0) do
+    true
+  end
 
   defp compare_prefix(left, right, prefix_bits) do
     bytes = div(prefix_bits, 8)
@@ -499,7 +525,7 @@ defmodule ShimmiePhoenix.Site.IPBans do
       true ->
         <<left_next, _::binary>> = binary_part(left, bytes, 1)
         <<right_next, _::binary>> = binary_part(right, bytes, 1)
-        mask = 0xFF <<< (8 - rem_bits) &&& 0xFF
+        mask = 255 <<< (8 - rem_bits) &&& 255
         (left_next &&& mask) == (right_next &&& mask)
     end
   end
@@ -512,15 +538,21 @@ defmodule ShimmiePhoenix.Site.IPBans do
     |> :inet.parse_address()
   end
 
-  defp ip_to_binary({a, b, c, d}), do: {:ok, <<a, b, c, d>>}
+  defp ip_to_binary({a, b, c, d}) do
+    {:ok, <<a, b, c, d>>}
+  end
 
   defp ip_to_binary({a, b, c, d, e, f, g, h}) do
     {:ok, <<a::16, b::16, c::16, d::16, e::16, f::16, g::16, h::16>>}
   end
 
-  defp ip_to_binary(_), do: :error
+  defp ip_to_binary(_) do
+    :error
+  end
 
-  defp ip_to_string(ip), do: ip |> :inet.ntoa() |> to_string()
+  defp ip_to_string(ip) do
+    ip |> :inet.ntoa() |> to_string()
+  end
 
   defp parse_int(value) do
     case Integer.parse(to_string(value || "")) do
@@ -530,10 +562,7 @@ defmodule ShimmiePhoenix.Site.IPBans do
   end
 
   defp query_rows(sql, params) when is_binary(sql) and is_map(params) do
-    case sqlite_db_path() do
-      nil -> query_rows_repo(sql, params)
-      path -> query_rows_sqlite(path, sql, params)
-    end
+    query_rows_repo(sql, params)
   end
 
   defp query_rows_repo(sql, params) do
@@ -555,69 +584,6 @@ defmodule ShimmiePhoenix.Site.IPBans do
     end
   end
 
-  defp query_rows_sqlite(path, sql, params) do
-    compiled_sql =
-      Enum.reduce(params, sql, fn {key, value}, acc ->
-        String.replace(acc, ":#{key}", sqlite_literal(value))
-      end)
-
-    sqlite_rows(path, compiled_sql)
-  end
-
-  defp sqlite_db_path do
-    case Site.sqlite_db_path() do
-      nil -> nil
-      path -> if File.exists?(path), do: path, else: nil
-    end
-  end
-
-  defp sqlite_rows(path, query) do
-    args = [
-      "-noheader",
-      "-separator",
-      @sqlite_separator,
-      "-newline",
-      @sqlite_row_separator,
-      path,
-      query
-    ]
-
-    case System.cmd("sqlite3", args, stderr_to_stdout: true) do
-      {output, 0} ->
-        output
-        |> String.split(@sqlite_row_separator, trim: true)
-        |> Enum.map(&String.split(&1, @sqlite_separator))
-
-      {error, _} ->
-        Logger.warning("ip_bans.sqlite query failed: #{String.trim(error)}")
-        []
-    end
-  end
-
-  defp sqlite_single(path, query) do
-    case sqlite_rows(path, query) do
-      [[value | _] | _] -> value
-      _ -> nil
-    end
-  end
-
-  defp sqlite_exec(path, query) do
-    case System.cmd("sqlite3", [path, query], stderr_to_stdout: true) do
-      {_output, 0} ->
-        :ok
-
-      {error, _} ->
-        Logger.warning("ip_bans.sqlite exec failed: #{String.trim(error)}")
-        {:error, :sqlite_failed}
-    end
-  end
-
-  defp sqlite_literal(value) when is_integer(value), do: Integer.to_string(value)
-  defp sqlite_literal(value) when is_float(value), do: Float.to_string(value)
-  defp sqlite_literal(value), do: "'" <> escape_sqlite_string(to_string(value || "")) <> "'"
-
-  defp escape_sqlite_string(value), do: String.replace(value, "'", "''")
-
   defp count_bans(include_all?) do
     where_sql = active_where_sql(include_all?)
 
@@ -627,9 +593,17 @@ defmodule ShimmiePhoenix.Site.IPBans do
     end
   end
 
-  defp active_where_sql(true), do: ""
-  defp active_where_sql(false), do: "WHERE (expires IS NULL OR expires > CURRENT_TIMESTAMP)"
-  defp active_where_sql(true, _prefix), do: ""
+  defp active_where_sql(true) do
+    ""
+  end
+
+  defp active_where_sql(false) do
+    "WHERE (expires IS NULL OR expires > CURRENT_TIMESTAMP)"
+  end
+
+  defp active_where_sql(true, _prefix) do
+    ""
+  end
 
   defp active_where_sql(false, prefix) when is_binary(prefix) do
     "WHERE (#{prefix}expires IS NULL OR #{prefix}expires > CURRENT_TIMESTAMP)"

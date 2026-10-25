@@ -31,24 +31,4 @@ defmodule ShimmiePhoenix.IDAllocatorTest do
 
     assert length(Enum.uniq(ids)) == 80
   end
-
-  test "SQLite allocation is serialized across independent processes" do
-    path = Path.join(System.tmp_dir!(), "id_fixture_#{System.unique_integer([:positive])}.sqlite")
-    on_exit(fn -> File.rm(path) end)
-
-    {_, 0} =
-      System.cmd("sqlite3", [
-        path,
-        "CREATE TABLE images(id INTEGER PRIMARY KEY); INSERT INTO images VALUES(99);"
-      ])
-
-    ids =
-      1..20
-      |> Task.async_stream(fn _ -> IDAllocator.next_sqlite!(path, "images") end,
-        max_concurrency: 10
-      )
-      |> Enum.map(fn {:ok, id} -> id end)
-
-    assert Enum.sort(ids) == Enum.to_list(100..119)
-  end
 end

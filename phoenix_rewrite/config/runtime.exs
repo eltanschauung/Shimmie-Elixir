@@ -29,8 +29,7 @@ legacy_dsn =
       nil
   end
 
-resolved_database_url =
-  System.get_env("SHIMMIE_DATABASE_URL") || ShimmiePhoenix.DatabaseURL.from_legacy_dsn(legacy_dsn)
+resolved_database_url = ShimmiePhoenix.DatabaseURL.resolve(legacy_dsn)
 
 config :shimmie_phx,
   legacy_root: legacy_root,
@@ -63,7 +62,7 @@ end
 
 if config_env() == :prod do
   database_url =
-    System.get_env("DATABASE_URL") || resolved_database_url ||
+    resolved_database_url ||
       raise """
       environment variable DATABASE_URL is missing.
       For example: ecto://USER:PASS@HOST/DATABASE

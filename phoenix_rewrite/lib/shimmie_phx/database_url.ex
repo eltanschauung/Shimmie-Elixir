@@ -1,5 +1,12 @@
 defmodule ShimmiePhoenix.DatabaseURL do
-  @moduledoc "Shared, side-effect-free legacy PostgreSQL DSN conversion and diagnostic redaction."
+  @moduledoc "Shared database selection, legacy PostgreSQL DSN conversion and diagnostic redaction."
+
+  @doc "The explicit PostgreSQL URL, with the same precedence in every environment."
+  def explicit_url do
+    System.get_env("DATABASE_URL") || System.get_env("SHIMMIE_DATABASE_URL")
+  end
+
+  def resolve(legacy_dsn), do: explicit_url() || from_legacy_dsn(legacy_dsn)
 
   def from_legacy_dsn("pgsql:" <> options) do
     params =

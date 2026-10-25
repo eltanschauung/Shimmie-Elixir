@@ -60,9 +60,12 @@ The rewrite can read legacy deployment paths and DSN from environment variables:
 - `SHIMMIE_LEGACY_CONFIG_PATH` (default: `$SHIMMIE_LEGACY_ROOT/data/config/shimmie.conf.php`)
 - `SHIMMIE_LEGACY_DSN` (optional raw legacy DSN)
 - `SHIMMIE_DATABASE_URL` (optional Ecto URL override)
+- `DATABASE_URL` (highest-priority PostgreSQL URL)
 
-If `SHIMMIE_DATABASE_URL` is not set, the app attempts to parse `DATABASE_DSN` from legacy
-`shimmie.conf.php` and convert PostgreSQL DSN format to an Ecto URL.
+All environments and query helpers use `DATABASE_URL`, then `SHIMMIE_DATABASE_URL`,
+then the legacy DSN. An explicit URL disables legacy SQLite selection, even if the
+old SQLite file still exists. With neither URL set, the app uses `SHIMMIE_LEGACY_DSN`
+or `DATABASE_DSN` from `shimmie.conf.php`; SQLite-only installs remain supported.
 
 ## Running Locally
 1. `mix setup`

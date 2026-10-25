@@ -14,7 +14,7 @@ defmodule ShimmiePhoenix.Site do
 
   def database_url_source do
     cond do
-      System.get_env("SHIMMIE_DATABASE_URL") -> :env_url
+      DatabaseURL.explicit_url() -> :env_url
       System.get_env("SHIMMIE_LEGACY_DSN") -> :env_dsn
       has_php_config?() -> :php_config
       true -> :none
@@ -52,6 +52,12 @@ defmodule ShimmiePhoenix.Site do
   end
 
   def sqlite_db_path do
+    # A legacy SQLite file must not divert contexts away from the explicitly
+    # configured PostgreSQL Repo, even if that stale file exists on disk.
+    if DatabaseURL.explicit_url(), do: nil, else: legacy_sqlite_db_path()
+  end
+
+  defp legacy_sqlite_db_path do
     case legacy_dsn() do
       "sqlite:" <> rest ->
         rel_or_abs = String.trim(rest)
@@ -68,7 +74,7 @@ defmodule ShimmiePhoenix.Site do
   end
 
   def database_url do
-    System.get_env("SHIMMIE_DATABASE_URL") || legacy_dsn_to_ecto_url(legacy_dsn())
+    DatabaseURL.resolve(legacy_dsn())
   end
 
   def redacted_database_url do

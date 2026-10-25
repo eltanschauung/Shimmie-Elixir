@@ -125,9 +125,11 @@ defmodule ShimmiePhoenixWeb.LegacyAssetController do
 
   defp safe_legacy_path(path_parts) do
     case path_parts do
-      ["data" | rest] ->
+      [scope | rest] when scope in ["data", "themes", "ext"] and rest != [] ->
+        # Each operator-configured scope root may itself point into an immutable
+        # release. Reject links beneath that boundary, not the boundary itself.
         ShimmiePhoenix.SafePath.regular_file(
-          Path.join(Site.legacy_root(), "data"),
+          Path.join(Site.legacy_root(), scope),
           Path.join(rest)
         )
 

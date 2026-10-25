@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_DIR="/home/USERNAME/shimmie2-elixir/phoenix_rewrite"
+APP_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/phoenix_rewrite" && pwd)"
 PORT="${1:-4001}"
 
 cd "$APP_DIR"

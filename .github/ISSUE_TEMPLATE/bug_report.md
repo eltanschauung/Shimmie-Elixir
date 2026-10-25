@@ -7,13 +7,13 @@ about: Create a report to help us improve
 **Server Software**
 (You can get all these stats from `http://<your site>/system_info`)
 
- - Shimmie version: [2.1.0, 2.13.0-dev-20260220-3406022, ...]
- - Install method: [Docker, Git, Zip, ...]
+ - Shimmie-Elixir commit/release:
+ - Elixir / Erlang / Phoenix versions:
+ - Install method: [release, development checkout, ...]
  - Server OS: [Windows 11, Debian, Arch, MacOS, ...]
- - Database: [mysql, postgres, ...]
+ - PostgreSQL version:
  - Web server: [apache, nginx, ...]
  - Theme: [default, danbooru2, ...]
- - Nice URLs: [enabled, disabled]
 
 **Client Software (please complete the following information)**
  - Device: [e.g. iphone, windows desktop]

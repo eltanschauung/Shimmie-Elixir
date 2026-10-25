@@ -102,4 +102,3 @@ Run `mix test`, `mix format --check-formatted` on changed Elixir/HEEx files,
 Use a disposable database and media root, never production. Coverage is a separate
 assurance metric (`mix test --cover`); a passing test suite is not a claim that
 the existing 90% coverage gate or a complete browser/security audit has passed.
-

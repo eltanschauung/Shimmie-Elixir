@@ -36,21 +36,21 @@ defmodule ShimmiePhoenixWeb.MediaControllerTest do
 
     old_root = Application.get_env(:shimmie_phx, :legacy_root)
     old_assets = Application.get_env(:shimmie_phx, :legacy_assets_dir)
-    old_config = Application.get_env(:shimmie_phx, :legacy_config_path)
+    old_config = Application.get_env(:shimmie_phx, :site_config_path)
 
     Application.put_env(:shimmie_phx, :legacy_root, root)
     Application.put_env(:shimmie_phx, :legacy_assets_dir, Path.join(root, "assets"))
 
     Application.put_env(
       :shimmie_phx,
-      :legacy_config_path,
-      Path.join([root, "data", "config", "shimmie.conf.php"])
+      :site_config_path,
+      Path.join([root, "data", "config", "site.json"])
     )
 
     on_exit(fn ->
       Application.put_env(:shimmie_phx, :legacy_root, old_root)
       Application.put_env(:shimmie_phx, :legacy_assets_dir, old_assets)
-      Application.put_env(:shimmie_phx, :legacy_config_path, old_config)
+      Application.put_env(:shimmie_phx, :site_config_path, old_config)
       File.rm_rf(root)
     end)
 
@@ -87,9 +87,9 @@ defmodule ShimmiePhoenixWeb.MediaControllerTest do
     hash = "abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
     for splits <- [0, 2] do
-      config = Path.join(root, "warehouse_#{splits}.php")
-      File.write!(config, "<?php define('WH_SPLITS', #{splits});")
-      Application.put_env(:shimmie_phx, :legacy_config_path, config)
+      config = Path.join(root, "warehouse_#{splits}.json")
+      File.write!(config, Jason.encode!(%{"warehouse_splits" => splits}))
+      Application.put_env(:shimmie_phx, :site_config_path, config)
       prefixes = if splits == 0, do: [], else: ["ab", "bb"]
 
       for warehouse <- ["images", "thumbs"] do

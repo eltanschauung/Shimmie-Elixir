@@ -1,0 +1,4 @@
+{
+  "name": "Metrics (OTLP)",
+  "description": "Sends stats to an OTLP server"
+}

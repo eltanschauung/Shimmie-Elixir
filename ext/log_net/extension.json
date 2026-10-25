@@ -1,0 +1,4 @@
+{
+  "name": "Logging (Network)",
+  "description": "Send log events to a network port"
+}

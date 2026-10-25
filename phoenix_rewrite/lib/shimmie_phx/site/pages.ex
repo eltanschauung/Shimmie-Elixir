@@ -904,7 +904,7 @@ defmodule ShimmiePhoenix.Site.Pages do
 
   defp valid_theme_dir?(themes_root, name) do
     path = Path.join(themes_root, name)
-    File.dir?(path) and File.regular?(Path.join(path, "page.class.php"))
+    File.dir?(path) and File.regular?(Path.join(path, "theme.json"))
   end
 
   defp humanize_theme_name(name) do
@@ -1132,30 +1132,11 @@ defmodule ShimmiePhoenix.Site.Pages do
   end
 
   defp enabled_extensions do
-    from_legacy =
-      case legacy_extensions_config_path() do
-        nil ->
-          []
-
-        path ->
-          case File.read(path) do
-            {:ok, body} ->
-              parse_enabled_extensions_from_legacy(body)
-
-            _ ->
-              []
-          end
-      end
-
-    if from_legacy != [] do
-      from_legacy
-    else
-      read_enabled_extensions_fallback()
-    end
+    ShimmiePhoenix.NativeConfig.get("enabled_extensions", [])
   end
 
   defp extension_row(key, enabled, ext_root) do
-    info_path = Path.join([ext_root, key, "info.php"])
+    info_path = Path.join([ext_root, key, "extension.json"])
     {name, description} = parse_extension_info(info_path, key)
 
     %{
@@ -1200,28 +1181,12 @@ defmodule ShimmiePhoenix.Site.Pages do
   end
 
   defp parse_extension_info(path, key) do
-    case File.read(path) do
-      {:ok, body} ->
-        name =
-          regex_capture(
-            body,
-            ~r/public string \$name\s*=\s*"([^"]+)"/,
-            humanize_extension_key(key)
-          )
-
-        description = regex_capture(body, ~r/public string \$description\s*=\s*"([^"]*)"/, "")
-
-        {name, description}
-
-      _ ->
-        {humanize_extension_key(key), ""}
-    end
-  end
-
-  defp regex_capture(body, regex, fallback) do
-    case Regex.run(regex, body) do
-      [_, value] -> value
-      _ -> fallback
+    with {:ok, body} <- File.read(path),
+         {:ok, %{"name" => name, "description" => description}} <- Jason.decode(body),
+         true <- is_binary(name) and is_binary(description) do
+      {name, description}
+    else
+      _ -> {humanize_extension_key(key), ""}
     end
   end
 
@@ -1236,54 +1201,6 @@ defmodule ShimmiePhoenix.Site.Pages do
     case Site.legacy_root() do
       root when is_binary(root) -> Path.join(root, "ext")
       _ -> nil
-    end
-  end
-
-  defp legacy_extensions_config_path do
-    case Site.legacy_root() do
-      root when is_binary(root) -> Path.join([root, "data", "config", "extensions.conf.php"])
-      _ -> nil
-    end
-  end
-
-  defp parse_enabled_extensions_from_legacy(body) when is_binary(body) do
-    php_array_values =
-      Regex.scan(~r/'([a-zA-Z0-9_]+)'/, body)
-      |> Enum.map(fn [_, value] -> value end)
-      |> Enum.reject(&(&1 in ["ExtManager", "Array"]))
-
-    extra_ext_values =
-      case Regex.run(
-             ~r/EXTRA_EXTS["']?\s*,\s*["']([^"']+)["']/,
-             body,
-             capture: :all_but_first
-           ) do
-        [csv] ->
-          csv
-          |> String.split(",")
-          |> Enum.map(&String.trim/1)
-          |> Enum.reject(&(&1 == ""))
-
-        _ ->
-          []
-      end
-
-    (php_array_values ++ extra_ext_values)
-    |> Enum.uniq()
-  end
-
-  defp read_enabled_extensions_fallback do
-    fallback_path = Path.expand("../../../../extensions_enabled.txt", __DIR__)
-
-    case File.read(fallback_path) do
-      {:ok, body} ->
-        body
-        |> String.split("\n")
-        |> Enum.map(&String.trim/1)
-        |> Enum.reject(&(&1 == "" or String.starts_with?(&1, "#")))
-
-      _ ->
-        []
     end
   end
 end

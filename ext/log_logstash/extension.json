@@ -1,0 +1,4 @@
+{
+  "name": "Logging (Logstash)",
+  "description": "Send log events to a network port"
+}

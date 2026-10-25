@@ -1,0 +1,4 @@
+{
+  "name": "Metrics (StatsD)",
+  "description": "Sends Shimmie stats to a StatsD server"
+}

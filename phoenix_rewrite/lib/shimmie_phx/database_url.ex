@@ -1,41 +1,18 @@
 defmodule ShimmiePhoenix.DatabaseURL do
-  @moduledoc "Shared database selection, legacy PostgreSQL DSN conversion and diagnostic redaction."
+  @moduledoc "Explicit PostgreSQL URL selection and credential-safe diagnostic redaction."
 
-  @doc "The explicit PostgreSQL URL, with the same precedence in every environment."
   def explicit_url do
-    System.get_env("DATABASE_URL") || System.get_env("SHIMMIE_DATABASE_URL")
-  end
+    case System.get_env("DATABASE_URL") || System.get_env("SHIMMIE_DATABASE_URL") do
+      nil ->
+        nil
 
-  def resolve(legacy_dsn), do: explicit_url() || from_legacy_dsn(legacy_dsn)
-
-  def from_legacy_dsn("pgsql:" <> options) do
-    params =
-      options
-      |> String.split(";", trim: true)
-      |> Enum.reduce(%{}, fn option, acc ->
-        case String.split(option, "=", parts: 2) do
-          [key, value] -> Map.put(acc, String.trim(key), value)
-          _ -> acc
+      url ->
+        case URI.new(url) do
+          {:ok, %{scheme: scheme}} when scheme in ["ecto", "postgres", "postgresql"] -> url
+          _ -> raise ArgumentError, "A valid PostgreSQL DATABASE_URL is required"
         end
-      end)
-
-    user = encode(Map.get(params, "user", "postgres"))
-    password = Map.get(params, "password", "")
-    userinfo = if password == "", do: user, else: user <> ":" <> encode(password)
-    host = Map.get(params, "host", "localhost")
-
-    host =
-      if String.contains?(host, ":") and not String.starts_with?(host, "["),
-        do: "[#{host}]",
-        else: host
-
-    port = Map.get(params, "port", "")
-    authority = if port == "", do: host, else: host <> ":" <> port
-    database = encode(Map.get(params, "dbname", "shimmie"))
-    "ecto://#{userinfo}@#{authority}/#{database}"
+    end
   end
-
-  def from_legacy_dsn(_), do: nil
 
   def redact(nil), do: nil
 
@@ -52,6 +29,4 @@ defmodule ShimmiePhoenix.DatabaseURL do
         "[invalid database URL]"
     end
   end
-
-  defp encode(value), do: URI.encode(value, &URI.char_unreserved?/1)
 end

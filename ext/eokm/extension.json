@@ -1,0 +1,4 @@
+{
+  "name": "EOKM Filter",
+  "description": "Check uploads against the EOKM blocklist"
+}

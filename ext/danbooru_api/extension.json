@@ -1,0 +1,4 @@
+{
+  "name": "Danbooru Client API",
+  "description": "Allow Danbooru apps like Danbooru Uploader for Firefox to communicate with Shimmie"
+}

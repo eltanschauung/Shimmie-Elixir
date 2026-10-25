@@ -1,0 +1,4 @@
+{
+  "name": "Logging (Database)",
+  "description": "Keep a record of site events (in the database)"
+}

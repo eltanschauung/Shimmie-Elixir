@@ -1,0 +1,4 @@
+{
+  "name": "Tracing (OTLP)",
+  "description": "Sends slow page traces to an OTLP server"
+}

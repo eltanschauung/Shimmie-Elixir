@@ -1,0 +1,4 @@
+{
+  "name": "Varnish Purger",
+  "description": "Sends PURGE requests when a /post/view is updated"
+}

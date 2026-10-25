@@ -2,39 +2,17 @@ import Config
 
 app_root = Path.expand("..", __DIR__)
 legacy_root = System.get_env("SHIMMIE_LEGACY_ROOT") || Path.expand("..", app_root)
-legacy_assets_dir = System.get_env("SHIMMIE_ASSETS_DIR") || Path.join(legacy_root, "assets")
 
-legacy_config_path =
-  System.get_env("SHIMMIE_LEGACY_CONFIG_PATH") ||
-    Path.join([legacy_root, "data", "config", "shimmie.conf.php"])
+site_config_path =
+  System.get_env("SHIMMIE_CONFIG_PATH") ||
+    System.get_env("SHIMMIE_LEGACY_CONFIG_PATH") ||
+    Path.join([legacy_root, "data", "config", "site.json"])
 
-legacy_dsn =
-  cond do
-    System.get_env("SHIMMIE_LEGACY_DSN") ->
-      System.get_env("SHIMMIE_LEGACY_DSN")
-
-    File.exists?(legacy_config_path) ->
-      case File.read(legacy_config_path) do
-        {:ok, content} ->
-          case Regex.run(~r/define\(\s*['"]DATABASE_DSN['"]\s*,\s*['"]([^'"]+)['"]\s*\)/, content) do
-            [_, dsn] -> dsn
-            _ -> nil
-          end
-
-        _ ->
-          nil
-      end
-
-    true ->
-      nil
-  end
-
-resolved_database_url = ShimmiePhoenix.DatabaseURL.resolve(legacy_dsn)
+resolved_database_url = ShimmiePhoenix.DatabaseURL.explicit_url()
 
 config :shimmie_phx,
   legacy_root: legacy_root,
-  legacy_assets_dir: legacy_assets_dir,
-  legacy_config_path: legacy_config_path
+  site_config_path: site_config_path
 
 if config_env() == :dev and resolved_database_url do
   config :shimmie_phx, ShimmiePhoenix.Repo, url: resolved_database_url
@@ -61,6 +39,13 @@ if System.get_env("PHX_SERVER") do
 end
 
 if config_env() == :prod do
+  settings = ShimmiePhoenix.NativeConfig.read!(site_config_path)
+  site_secret = System.get_env("SHIMMIE_SECRET") || settings["secret"]
+
+  unless is_binary(site_secret) and byte_size(site_secret) > 0 do
+    raise "Set SHIMMIE_SECRET or provide secret in the native site JSON configuration"
+  end
+
   database_url =
     resolved_database_url ||
       raise """

@@ -299,15 +299,18 @@ defmodule ShimmiePhoenixWeb.LegacyPagesControllerTest do
     File.mkdir_p!(config_dir)
 
     File.write!(
-      Path.join(config_dir, "extensions.conf.php"),
-      "<?php $extensions = ['ipban', 'source_history', 'tag_history'];"
+      Path.join(config_dir, "site.json"),
+      Jason.encode!(%{"enabled_extensions" => ["ipban", "source_history", "tag_history"]})
     )
 
     previous_root = Application.get_env(:shimmie_phx, :legacy_root)
+    previous_config = Application.get_env(:shimmie_phx, :site_config_path)
     Application.put_env(:shimmie_phx, :legacy_root, root)
+    Application.put_env(:shimmie_phx, :site_config_path, Path.join(config_dir, "site.json"))
 
     on_exit(fn ->
       Application.put_env(:shimmie_phx, :legacy_root, previous_root)
+      Application.put_env(:shimmie_phx, :site_config_path, previous_config)
       File.rm_rf!(root)
     end)
 

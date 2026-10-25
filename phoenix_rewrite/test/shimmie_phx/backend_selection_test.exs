@@ -6,22 +6,22 @@ defmodule ShimmiePhoenix.BackendSelectionTest do
   alias ShimmiePhoenix.Site.Store
   alias ShimmiePhoenix.SiteSchemaHelper
 
-  @environment ~w(DATABASE_URL SHIMMIE_DATABASE_URL SHIMMIE_LEGACY_DSN SHIMMIE_LEGACY_ROOT SHIMMIE_LEGACY_CONFIG_PATH SECRET_KEY_BASE)
+  @environment ~w(DATABASE_URL SHIMMIE_DATABASE_URL SHIMMIE_LEGACY_DSN SHIMMIE_LEGACY_ROOT SHIMMIE_LEGACY_CONFIG_PATH SHIMMIE_CONFIG_PATH SHIMMIE_SECRET SECRET_KEY_BASE)
 
   setup do
     previous_env = Map.new(@environment, &{&1, System.get_env(&1)})
 
     previous_app =
-      Map.new([:legacy_root, :legacy_config_path], &{&1, Application.fetch_env(:shimmie_phx, &1)})
+      Map.new([:legacy_root, :site_config_path], &{&1, Application.fetch_env(:shimmie_phx, &1)})
 
     root = Path.join(System.tmp_dir!(), "backend_selection_#{System.unique_integer([:positive])}")
     File.mkdir_p!(root)
     File.write!(Path.join(root, "empty.sqlite"), "")
-    config = Path.join(root, "legacy.php")
+    config = Path.join(root, "site.json")
 
     File.write!(
       config,
-      "<?php\ndefine('DATABASE_DSN', 'sqlite:empty.sqlite');\ndefine('SECRET', 'synthetic-stable-secret');\n"
+      Jason.encode!(%{"secret" => "synthetic-stable-secret", "warehouse_splits" => 1})
     )
 
     on_exit(fn ->
@@ -40,10 +40,10 @@ defmodule ShimmiePhoenix.BackendSelectionTest do
 
     Enum.each(@environment, &System.delete_env/1)
     System.put_env("SHIMMIE_LEGACY_ROOT", root)
-    System.put_env("SHIMMIE_LEGACY_CONFIG_PATH", config)
+    System.put_env("SHIMMIE_CONFIG_PATH", config)
     System.put_env("SECRET_KEY_BASE", String.duplicate("synthetic-test-secret", 4))
     Application.put_env(:shimmie_phx, :legacy_root, root)
-    Application.put_env(:shimmie_phx, :legacy_config_path, config)
+    Application.put_env(:shimmie_phx, :site_config_path, config)
     %{root: root}
   end
 
@@ -87,10 +87,11 @@ defmodule ShimmiePhoenix.BackendSelectionTest do
     refute function_exported?(ShimmiePhoenix.IDAllocator, :next_sqlite!, 2)
   end
 
-  test "legacy-only PostgreSQL remains supported" do
+  test "legacy DSNs cannot replace an explicit PostgreSQL URL" do
     System.put_env("SHIMMIE_LEGACY_DSN", "pgsql:host=localhost;user=dummy;dbname=synthetic")
-    assert Site.database_url() == "ecto://dummy@localhost/synthetic"
-    refute function_exported?(Site, :sqlite_db_path, 0)
+    assert Site.database_url() == nil
+    assert Site.database_url_source() == :none
+    refute function_exported?(Site, :legacy_dsn, 0)
   end
 
   for variable <- ~w(DATABASE_URL SHIMMIE_DATABASE_URL) do

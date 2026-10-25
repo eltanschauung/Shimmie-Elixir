@@ -1,0 +1,4 @@
+{
+  "name": "S3 CDN Backend",
+  "description": "Push media files to S3"
+}

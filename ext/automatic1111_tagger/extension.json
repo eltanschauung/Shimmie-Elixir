@@ -1,0 +1,4 @@
+{
+  "name": "AI Tagger",
+  "description": "Connects to the Automatic1111 API to interrogate images and suggest tags."
+}

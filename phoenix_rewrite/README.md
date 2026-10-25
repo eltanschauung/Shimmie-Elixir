@@ -39,7 +39,6 @@ MAX+1 writers. Existing media, credentials and instance configuration are preser
 ## Current Baseline
 - Phoenix app listens on `0.0.0.0:4001` in development.
 - Compatibility health endpoint: `GET /__compat/health` (enabled in `dev` and `test`; disabled by default in production)
-- Parity scanner task: `mix shimmie.parity.snapshot`
 - First read-compat slice implemented:
   - `GET /post/view/:image_id`
   - `GET /image/:image_id/:filename`
@@ -52,20 +51,26 @@ MAX+1 writers. Existing media, credentials and instance configuration are preser
   - `POST /favourite/remove/:image_id`
   - Post view now shows "Favorited By" from legacy favorites tables
 
-## Compatibility Environment
-The rewrite can read legacy deployment paths and DSN from environment variables:
+## Native Configuration
 
-- `SHIMMIE_LEGACY_ROOT` (default: parent directory of this app)
-- `SHIMMIE_ASSETS_DIR` (default: `$SHIMMIE_LEGACY_ROOT/assets`)
-- `SHIMMIE_LEGACY_CONFIG_PATH` (default: `$SHIMMIE_LEGACY_ROOT/data/config/shimmie.conf.php`)
-- `SHIMMIE_LEGACY_DSN` (optional raw legacy DSN)
+- `SHIMMIE_LEGACY_ROOT` (asset/media root; default: parent directory of this app)
+- `SHIMMIE_CONFIG_PATH` (native JSON; default: `$SHIMMIE_LEGACY_ROOT/data/config/site.json`)
+- `SHIMMIE_SECRET` (site credential-derivation secret, unless JSON supplies `secret`)
 - `SHIMMIE_DATABASE_URL` (optional Ecto URL override)
 - `DATABASE_URL` (highest-priority PostgreSQL URL)
 
-All environments and query helpers use `DATABASE_URL`, then `SHIMMIE_DATABASE_URL`,
-then the legacy DSN. An explicit URL disables legacy SQLite selection, even if the
-old SQLite file still exists. With neither URL set, the app uses `SHIMMIE_LEGACY_DSN`
-or `DATABASE_DSN` from `shimmie.conf.php`; SQLite-only installs remain supported.
+PostgreSQL is the only backend. `DATABASE_URL` takes precedence over
+`SHIMMIE_DATABASE_URL`; PHP configuration and legacy DSNs are no longer read.
+Copy `priv/examples/site.example.json` to the private configuration path if needed.
+JSON supports `warehouse_splits`, `enabled_extensions`, and optional `secret`.
+Production requires a site secret as well as `SECRET_KEY_BASE`.
+
+For existing installations, preserve the exact old site secret, warehouse split
+count, and enabled-extension list when converting settings. Never regenerate either
+secret or rename media paths during this upgrade. Keep the JSON file private and
+out of Git. The old `SHIMMIE_LEGACY_CONFIG_PATH` path variable remains accepted for
+credential-isolated launchers, but its file must now contain native JSON, not PHP.
+Extension labels use `ext/*/extension.json`; theme discovery uses `theme.json`.
 
 ## Running Locally
 1. `mix setup`
@@ -98,16 +103,3 @@ Use a disposable database and media root, never production. Coverage is a separa
 assurance metric (`mix test --cover`); a passing test suite is not a claim that
 the existing 90% coverage gate or a complete browser/security audit has passed.
 
-## Parity Tracking
-Run:
-
-```bash
-mix shimmie.parity.snapshot
-```
-
-This generates:
-- `docs/parity_snapshot.md`
-- `docs/parity_matrix.csv`
-
-By default it filters scope to enabled extensions listed in `../extensions_enabled.txt`.
-Override with `SHIMMIE_ENABLED_EXTENSIONS_FILE=/path/to/file`.

@@ -1,0 +1,4 @@
+{
+  "name": "Live Feed",
+  "description": "Logs user-safe (no IPs) data to a UDP socket, eg IRCCat"
+}

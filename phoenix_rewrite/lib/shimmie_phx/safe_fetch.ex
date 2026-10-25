@@ -38,7 +38,9 @@ defmodule ShimmiePhoenix.SafeFetch do
                "%{http_code}",
                "--",
                url
-             ], max_file_size: max_size),
+             ],
+             max_file_size: max_size
+           ),
          {code, ""} when code in 200..299 <- Integer.parse(status),
          {:ok, %{size: size}} when size > 0 and size <= max_size <- File.stat(target) do
       :ok

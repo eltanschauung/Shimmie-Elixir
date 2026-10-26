@@ -55,7 +55,7 @@ defmodule ShimmiePhoenix.MixProject do
       {:gettext, "~> 1.0.2"},
       {:jason, "~> 1.4.5"},
       {:dns_cluster, "~> 0.3.1"},
-      {:bandit, "~> 1.13.1"},
+      {:bandit, "~> 1.14.0"},
       {:plug, "~> 1.20.3"},
       {:bcrypt_elixir, "~> 3.3.2"}
     ]
